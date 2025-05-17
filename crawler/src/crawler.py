@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 import asyncio
 import aiohttp
 
-from postgres import insert_url, create_table, getCrawledUrls
+from postgres import *
 create_table()
 
 crawledUrls = set()
@@ -76,17 +76,20 @@ async def worker(session):
                 soup = BeautifulSoup(await response.text(), 'html.parser')
                 links = soup.find_all('a', href=True)
                 plainText = soup.get_text()
+                plainText = plainText.replace('\n', ' ').replace('\r', ' ').strip()
 
                 await insert_url(url, plainText)
 
                 for link in links:
-                    await queue.put(link['href'])
-        
+                    link_url = link['href']
+                    if isValidLink(link_url):
+                        await queue.put(link_url)
+
         except Exception as e:
             print(f"Error fetching {url}: {e}")
         finally:
             queue.task_done()
-
+            
 
 def isValidLink(link):
     # If image or file...
@@ -110,7 +113,7 @@ async def main():
         startingPoints = [
             "https://pt.wikipedia.org/wiki/Minecraft",
             "https://docs.python.org/3.9/library/asyncio-task.html",
-            "https://medium.com/@luanrubensf/concurrent-map-access-in-go-a6a733c5ffd1"
+            "https://medium.com/@luanrubensf/concurrent-map-access-in-go-a6a733c5ffd1",
         ]
         saved_urls.extend(startingPoints)
 
@@ -138,7 +141,7 @@ async def main():
             for task in tasks:
                 task.cancel()
 
-            await asyncio.gather(*tasks, return_exceptions=True)        
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 if __name__ == "__main__":
