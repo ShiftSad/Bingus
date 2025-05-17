@@ -1,109 +1,80 @@
--- Save this as calculate_pagerank.sql
-CREATE OR REPLACE FUNCTION calculate_pagerank_in_db(
-    p_damping_factor FLOAT DEFAULT 0.85,
-    p_iterations INT DEFAULT 20
-)
-RETURNS VOID AS $$
+CREATE OR REPLACE FUNCTION update_pagerank(
+    damping    FLOAT   DEFAULT 0.85,
+    max_iter   INT     DEFAULT 20,
+    tol        FLOAT   DEFAULT 1e-6
+) RETURNS VOID AS $$
 DECLARE
-    v_total_urls BIGINT;
-    v_base_value FLOAT;
-    i INT;
+    n           INT;
+    iter        INT;
+    total_diff  FLOAT;
 BEGIN
-    -- 1. Ensure 'rank' column exists
-    RAISE NOTICE 'Checking/Adding rank column...';
-    ALTER TABLE crawled_urls ADD COLUMN IF NOT EXISTS rank FLOAT;
-
-    -- 2. Ensure 'outbound_link_count' column exists
-    RAISE NOTICE 'Checking/Adding outbound_link_count column...';
-    ALTER TABLE crawled_urls ADD COLUMN IF NOT EXISTS outbound_link_count INT;
-
-    -- 3. Populate/Update 'outbound_link_count'
-    RAISE NOTICE 'Updating outbound link counts...';
-    -- Initialize all to 0 first
-    UPDATE crawled_urls SET outbound_link_count = 0;
-    -- Then update with actual counts
-    WITH link_counts AS (
-        SELECT
-            from_url,
-            COUNT(*) AS o_count
-        FROM
-            urls --  Ensure this matches your table name (defined as 'urls' in Python)
-        GROUP BY
-            from_url
-    )
-    UPDATE crawled_urls c
-    SET outbound_link_count = lc.o_count
-    FROM link_counts lc
-    WHERE c.url = lc.from_url;
-    RAISE NOTICE 'Outbound link counts updated.';
-
-    -- 4. Initialize ranks
-    RAISE NOTICE 'Initializing ranks to 1.0...';
-    UPDATE crawled_urls SET rank = 1.0;
-    COMMIT; -- Commit schema changes and initial rank setup
-
-    -- 5. Get total_urls
-    SELECT COUNT(*) INTO v_total_urls FROM crawled_urls;
-    IF v_total_urls = 0 THEN
-        RAISE NOTICE 'No URLs found in crawled_urls. Exiting.';
+    -- Count total pages
+    SELECT COUNT(*) INTO n FROM crawled_urls;
+    IF n = 0 THEN
+        RAISE NOTICE 'No pages to rank.';
         RETURN;
     END IF;
-    RAISE NOTICE 'Total URLs: %', v_total_urls;
 
-    -- 6. Create a temporary table for new ranks (dropped at end of session or commit)
-    CREATE TEMP TABLE IF NOT EXISTS new_pageranks (
-        url TEXT PRIMARY KEY,
-        new_rank FLOAT
-    ) ON COMMIT DROP;
+    -- Temporary tables to hold old and new ranks
+    CREATE TEMP TABLE pr_old(url TEXT PRIMARY KEY, rank FLOAT);
+    CREATE TEMP TABLE pr_new(url TEXT PRIMARY KEY, rank FLOAT);
 
-    -- 7. Iterative calculation
-    RAISE NOTICE 'Starting PageRank iterations...';
-    FOR i IN 1..p_iterations LOOP
-        RAISE NOTICE 'Iteration %/%', i, p_iterations;
+    -- Initialize all ranks to 1/n
+    INSERT INTO pr_old
+    SELECT url, 1.0 / n
+      FROM crawled_urls;
 
-        -- Clear temp table for current iteration's new ranks
-        TRUNCATE TABLE new_pageranks;
+    -- Precompute out-degrees
+    CREATE TEMP TABLE outdeg AS
+    SELECT from_url, COUNT(*) AS deg
+      FROM urls
+     GROUP BY from_url;
 
-        -- Calculate base value for "teleportation"
-        v_base_value := (1.0 - p_damping_factor) / v_total_urls;
+    -- Iteratively update PageRank
+    FOR iter IN 1..max_iter LOOP
+        -- Build new ranks
+        TRUNCATE pr_new;
 
-        -- Calculate new ranks and store them in the temporary table.
-        -- This query calculates the sum of rank contributions from incoming links.
-        INSERT INTO new_pageranks (url, new_rank)
+        INSERT INTO pr_new(url, rank)
         SELECT
-            target_cu.url,
-            v_base_value + p_damping_factor * COALESCE(
-                SUM(
-                    source_cu.rank / GREATEST(source_cu.outbound_link_count, 1) -- Use GREATEST to prevent division by zero
-                ),
-                0.0 -- If no incoming links, sum is 0
-            ) AS calculated_rank
+          cu.url,
+          (1 - damping) / n
+          + damping * COALESCE(SUM(po.rank::FLOAT / od.deg), 0)
         FROM
-            crawled_urls target_cu -- For every URL in our table...
-        LEFT JOIN
-            urls ul ON target_cu.url = ul.to_url -- ...find links pointing TO it (Ensure this table name 'urls' is correct)
-        LEFT JOIN
-            crawled_urls source_cu ON ul.from_url = source_cu.url -- ...and get the source of that link
-            -- source_cu.rank is the rank from the previous iteration
-            -- source_cu.outbound_link_count is the pre-calculated count
-        GROUP BY
-            target_cu.url;
+          crawled_urls cu
+          LEFT JOIN urls u ON cu.url = u.to_url
+          LEFT JOIN pr_old po     ON u.from_url = po.url
+          LEFT JOIN outdeg od     ON u.from_url = od.from_url
+        GROUP BY cu.url;
 
-        -- Update the actual rank column from the temporary table
-        UPDATE crawled_urls cu
-        SET rank = nr.new_rank
-        FROM new_pageranks nr
-        WHERE cu.url = nr.url;
-        
-        -- COMMIT; -- Optional: commit after each iteration if needed for very long processes,
-                  -- but generally better to commit at the end for atomicity.
+        -- Compute total change to check convergence
+        SELECT SUM(ABS(po.rank - pn.rank)) INTO total_diff
+          FROM pr_old po
+          JOIN pr_new pn USING (url);
+
+        IF total_diff < tol THEN
+            RAISE NOTICE 'Converged after % iterations (Δ=%)', iter, total_diff;
+            EXIT;
+        END IF;
+
+        -- Swap pr_old ← pr_new
+        UPDATE pr_old o
+           SET rank = n.rank
+          FROM pr_new n
+         WHERE o.url = n.url;
     END LOOP;
 
-    RAISE NOTICE 'PageRank calculation completed after % iterations.', p_iterations;
+    -- Write back into crawled_urls.rank
+    UPDATE crawled_urls c
+       SET rank = p.rank
+      FROM pr_old p
+     WHERE c.url = p.url;
 
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE NOTICE 'Error calculating PageRank: %', SQLERRM;
-        RAISE; -- Re-raise the error to ensure transaction rollback
+    -- Clean up
+    DROP TABLE pr_old;
+    DROP TABLE pr_new;
+    DROP TABLE outdeg;
+
+    RAISE NOTICE 'PageRank updated over % pages.', n;
 END;
 $$ LANGUAGE plpgsql;
