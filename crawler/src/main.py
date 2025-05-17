@@ -3,13 +3,14 @@ from bs4 import BeautifulSoup
 
 import asyncio
 import aiohttp
-import re
+
+from crawler.src.postgres import insert_url
 
 crawledUrls = set()
 queue = asyncio.Queue()
 
 
-async def woeker(session):
+async def worker(session):
     while True:
         url = await queue.get()
 
@@ -33,6 +34,9 @@ async def woeker(session):
 
                 soup = BeautifulSoup(await response.text(), 'html.parser')
                 links = soup.find_all('a', href=True)
+                plainText = soup.get_text()
+
+                await insert_url(url, plainText)
 
                 for link in links:
                     await queue.put(link['href'])
@@ -71,7 +75,7 @@ async def main():
 
         tasks = []
         for i in range(num_workers):
-            task = asyncio.create_task(woeker(session))
+            task = asyncio.create_task(worker(session))
             tasks.append(task)
 
         await queue.join()
