@@ -15,6 +15,7 @@ getCrawledUrls(crawledUrls)
 queue = asyncio.Queue()
 QUEUE_SAVE_PATH = "crawler_queue.pickle"
 SAVE_INTERVAL = 300
+USER_AGENT = "ShiftCrawler/1.0 (+https://github.com/ShiftSad/SearchEngine)"
 
 def load_queue():
     if os.path.exists(QUEUE_SAVE_PATH):
@@ -119,7 +120,9 @@ async def main():
 
     num_workers = 20
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(
+        headers={"User-Agent": USER_AGENT}
+    ) as session:
         for url in saved_urls:
             await queue.put(url)
 
