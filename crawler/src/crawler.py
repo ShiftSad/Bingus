@@ -1,14 +1,49 @@
 import time
+import pickle
+import os
 from bs4 import BeautifulSoup
 
 import asyncio
 import aiohttp
 
-from postgres import insert_url, create_table
+from postgres import insert_url, create_table, getCrawledUrls
 create_table()
 
 crawledUrls = set()
+getCrawledUrls(crawledUrls)
+
 queue = asyncio.Queue()
+QUEUE_SAVE_PATH = "crawler_queue.pickle"
+SAVE_INTERVAL = 300
+
+def load_queue():
+    if os.path.exists(QUEUE_SAVE_PATH):
+        try:
+            with open(QUEUE_SAVE_PATH, 'rb') as f:
+                urls = pickle.load(f)
+                print(f"Loaded {len(urls)} URLs from saved queue")
+                return urls
+        except Exception as e:
+            print(f"Error loading queue: {e}")
+    return []
+
+
+async def save_queue():
+    try:
+        queue_items = []
+        # Use queue._queue to peek at items without removing them
+        queue_items = list(queue._queue)
+        with open(QUEUE_SAVE_PATH, 'wb') as f:
+            pickle.dump(queue_items, f)
+            print(f"Saved {len(queue_items)} URLs to queue file")
+    except Exception as e:
+        print(f"Error saving queue: {e}")
+
+
+async def periodic_save():
+    while True:
+        await asyncio.sleep(SAVE_INTERVAL)
+        await save_queue()
 
 
 async def worker(session):
@@ -30,6 +65,11 @@ async def worker(session):
             async with session.get(url) as response:
                 if response.status != 200:
                     print(f"Failed to fetch {url}: {response.status}")
+                    queue.task_done()
+                    continue
+
+                if 'text/html' not in response.headers.get('Content-Type', ''):
+                    print(f"Skipping non-HTML content: {url}")
                     queue.task_done()
                     continue
 
@@ -64,36 +104,51 @@ def isValidLink(link):
 
 
 async def main():
-    startingPoints = [
-        "https://pt.wikipedia.org/wiki/Minecraft"
-    ]
+    saved_urls = load_queue()
+    
+    if not saved_urls:
+        startingPoints = [
+            "https://pt.wikipedia.org/wiki/Minecraft",
+            "https://docs.python.org/3.9/library/asyncio-task.html",
+            "https://medium.com/@luanrubensf/concurrent-map-access-in-go-a6a733c5ffd1"
+        ]
+        saved_urls.extend(startingPoints)
 
     num_workers = 20
 
     async with aiohttp.ClientSession() as session:
-        for url in startingPoints:
+        for url in saved_urls:
             await queue.put(url)
 
+        save_task = asyncio.create_task(periodic_save())
+        
         tasks = []
         for i in range(num_workers):
             task = asyncio.create_task(worker(session))
             tasks.append(task)
 
-        await queue.join()
-        for task in tasks:
-            task.cancel()
+        try:
+            await queue.join()
+        except (KeyboardInterrupt, Exception) as e:
+            print(f"Interrupted: {e}. Saving queue before exit...")
+        finally:
+            await save_queue()
+            
+            save_task.cancel()
+            for task in tasks:
+                task.cancel()
 
-        await asyncio.gather(*tasks, return_exceptions=True)        
+            await asyncio.gather(*tasks, return_exceptions=True)        
 
 
 if __name__ == "__main__":
     start_time = time.time()
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Keyboard interrupt received, exiting gracefully...")
     end_time = time.time()
 
     print("\n--- Crawling Complete ---")
     print(f"Total URLs crawled: {len(crawledUrls)}")
     print(f"Total time taken: {end_time - start_time:.2f} seconds")
-    print("\nCrawled URLs:")
-    for url in crawledUrls:
-        print(url)

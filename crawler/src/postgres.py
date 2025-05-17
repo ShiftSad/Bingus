@@ -25,6 +25,14 @@ def create_table():
         conn.commit()
 
 
+def getCrawledUrls(crawledUrls):
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT url FROM crawled_urls")
+        rows = cursor.fetchall()
+        for row in rows:
+            crawledUrls.add(row[0])
+
+
 async def insert_url(url, plaintext):
     with conn.cursor() as cursor:
         try:
