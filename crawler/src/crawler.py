@@ -4,7 +4,8 @@ from bs4 import BeautifulSoup
 import asyncio
 import aiohttp
 
-from crawler.src.postgres import insert_url
+from postgres import insert_url, create_table
+create_table()
 
 crawledUrls = set()
 queue = asyncio.Queue()

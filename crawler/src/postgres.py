@@ -11,6 +11,7 @@ conn = psycopg2.connect(
 
 def create_table():
     with conn.cursor() as cursor:
+        cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS crawled_urls (
                 id SERIAL PRIMARY KEY,
@@ -18,7 +19,7 @@ def create_table():
                 embedding vector(768),
                 plaintext TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                CONSTRAINT url_length CHECK (char_length(url) <= 2048),
+                CONSTRAINT url_length CHECK (char_length(url) <= 2048)
             )
         """)
         conn.commit()
