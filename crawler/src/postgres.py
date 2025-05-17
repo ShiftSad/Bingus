@@ -69,3 +69,22 @@ async def insert_url(url, plaintext):
             """, url, plaintext)
         except Exception as e:
             print(f"Error inserting URL {url}: {e}")
+
+
+async def insert_url_links(from_url, to_urls):
+    if not to_urls:
+        return
+    
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            values = [(from_url, to_url) for to_url in to_urls]
+
+            await conn.execute_many("""
+                INSERT INTO urls (from_url, to_url)
+                VALUES ($1, $2)
+                ON CONFLICT (from_url, to_url) DO NOTHING
+            """, values)
+            
+        except Exception as e:
+            print(f"Error inserting URL links from {from_url}: {e}")

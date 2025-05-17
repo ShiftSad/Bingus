@@ -60,7 +60,6 @@ async def worker(session):
             continue
 
         crawledUrls.add(url)
-        print(f"Crawled {len(crawledUrls)} URLs, Running: {url}")
 
         try:
             async with session.get(url) as response:
@@ -81,10 +80,15 @@ async def worker(session):
 
                 await insert_url(url, plainText)
 
+                valid_to_urls = []
                 for link in links:
                     link_url = link['href']
                     if isValidLink(link_url):
+                        valid_to_urls.append(link_url)
                         await queue.put(link_url)
+
+                await insert_url_links(url, valid_to_urls)
+                print(f"Crawled {len(crawledUrls)} URLs, Running: {url}")
 
         except Exception as e:
             print(f"Error fetching {url}: {e}")
