@@ -1,3 +1,4 @@
+-- Save this as calculate_pagerank.sql
 CREATE OR REPLACE FUNCTION calculate_pagerank_in_db(
     p_damping_factor FLOAT DEFAULT 0.85,
     p_iterations INT DEFAULT 20
@@ -26,7 +27,7 @@ BEGIN
             from_url,
             COUNT(*) AS o_count
         FROM
-            url_links
+            urls --  Ensure this matches your table name (defined as 'urls' in Python)
         GROUP BY
             from_url
     )
@@ -80,7 +81,7 @@ BEGIN
         FROM
             crawled_urls target_cu -- For every URL in our table...
         LEFT JOIN
-            url_links ul ON target_cu.url = ul.to_url -- ...find links pointing TO it
+            urls ul ON target_cu.url = ul.to_url -- ...find links pointing TO it (Ensure this table name 'urls' is correct)
         LEFT JOIN
             crawled_urls source_cu ON ul.from_url = source_cu.url -- ...and get the source of that link
             -- source_cu.rank is the rank from the previous iteration

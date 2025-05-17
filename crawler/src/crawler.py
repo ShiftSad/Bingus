@@ -17,6 +17,8 @@ QUEUE_SAVE_PATH = "crawler_queue.pickle"
 SAVE_INTERVAL = 300
 USER_AGENT = "ShiftCrawler/1.0 (+https://github.com/ShiftSad/SearchEngine)"
 
+insert_pool = InsertPool(max_queue_size=10000, batch_size=100, flush_interval=1.0)
+
 def load_queue():
     if os.path.exists(QUEUE_SAVE_PATH):
         try:
@@ -78,17 +80,20 @@ async def worker(session):
                 plainText = soup.get_text()
                 plainText = plainText.replace('\n', ' ').replace('\r', ' ').strip()
 
-                await insert_url(url, plainText)
+                if plainText:
+                    await insert_pool.insert_url(url, plainText)
 
                 valid_to_urls = []
                 for link in links:
                     link_url = link['href']
                     if isValidLink(link_url):
+                        # If link is self, skip it
+                        if link_url == url:
+                            continue
                         valid_to_urls.append(link_url)
                         await queue.put(link_url)
 
-                await insert_url_links(url, valid_to_urls)
-                print(f"Crawled {len(crawledUrls)} URLs, Running: {url}")
+                await insert_pool.insert_url_links(url, valid_to_urls)
 
         except Exception as e:
             print(f"Error fetching {url}: {e}")
@@ -122,7 +127,8 @@ async def main():
         ]
         saved_urls.extend(startingPoints)
 
-    num_workers = 20
+    num_workers = 40
+    await insert_pool.start()
 
     async with aiohttp.ClientSession(
         headers={"User-Agent": USER_AGENT}
@@ -149,6 +155,7 @@ async def main():
                 task.cancel()
 
             await asyncio.gather(*tasks, return_exceptions=True)
+            await insert_pool.stop()
 
 
 if __name__ == "__main__":
