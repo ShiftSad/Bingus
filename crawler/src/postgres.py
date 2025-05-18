@@ -48,7 +48,7 @@ def create_table():
             CONSTRAINT no_self_references CHECK (from_url <> to_url)
             )
         """)
-        
+
         try:
             with open("calculate_pagerank.sql", "r", encoding="utf-8") as f:
                 sql = f.read()
@@ -68,6 +68,34 @@ def getCrawledUrls(crawledUrls):
     for row in rows:
         crawledUrls.add(row[0])
     cursor.close()
+
+
+def getPlainText(limit=1000):
+    cursor = sync_conn.cursor()
+    cursor.execute("SELECT url, plaintext FROM crawled_urls WHERE plaintext IS NOT NULL AND embedding IS NULL LIMIT %s", (limit,))
+    rows = cursor.fetchall()
+    cursor.close()
+    return rows
+
+
+async def saveEmbedding(url, embedding):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            embedding_str = ','.join(map(str, embedding))
+            embedding_str = f'[{embedding_str}]'
+            
+            await conn.execute(
+                """
+                UPDATE crawled_urls
+                SET embedding = $1::vector
+                WHERE url = $2
+                """,
+                embedding_str,
+                url,
+            )
+        except Exception as e:
+            print(f"Error saving embedding for {url}: {e}")
 
 
 class InsertType:
