@@ -103,17 +103,16 @@ async def worker(session):
             
 
 def isValidLink(link):
-    # If image or file...
     if link.endswith(('.png', '.jpg', '.jpeg', '.gif', '.pdf', '.docx', '.xlsx')):
         return False
-    
-    # If link is a fragment
     if link.startswith('#'):
         return False
-    
     if not link.startswith('http'):
         return False
-    
+    # If link is webarchive or twitter, or x, or linkedIn, skip it
+    if 'web.archive.org' in link or 'twitter.com' in link or 'x.com' in link or 'linkedin.com' in link:
+        return False
+        
     return True
 
 
@@ -128,7 +127,7 @@ async def main():
         ]
         saved_urls.extend(startingPoints)
 
-    num_workers = 60
+    num_workers = 30
     await insert_pool.start()
 
     async with aiohttp.ClientSession(
