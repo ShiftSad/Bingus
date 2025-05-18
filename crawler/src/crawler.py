@@ -16,6 +16,7 @@ queue = asyncio.Queue()
 QUEUE_SAVE_PATH = "crawler_queue.pickle"
 SAVE_INTERVAL = 300
 USER_AGENT = "ShiftCrawler/1.0 (+https://github.com/ShiftSad/SearchEngine)"
+REQUEST_TIMEOUT = 10
 
 insert_pool = InsertPool(max_queue_size=10000, batch_size=100, flush_interval=1.0)
 
@@ -64,7 +65,7 @@ async def worker(session):
         crawledUrls.add(url)
 
         try:
-            async with session.get(url) as response:
+            async with session.get(url, timeout=REQUEST_TIMEOUT) as response:
                 if response.status != 200:
                     print(f"Failed to fetch {url}: {response.status}")
                     queue.task_done()
@@ -127,7 +128,7 @@ async def main():
         ]
         saved_urls.extend(startingPoints)
 
-    num_workers = 40
+    num_workers = 60
     await insert_pool.start()
 
     async with aiohttp.ClientSession(

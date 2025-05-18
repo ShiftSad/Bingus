@@ -48,9 +48,15 @@ def create_table():
             CONSTRAINT no_self_references CHECK (from_url <> to_url)
             )
         """)
-        with open("calculate_pagerank.sql", "r") as f:
-            sql = f.read()
-            cursor.execute(sql)
+        
+        try:
+            with open("calculate_pagerank.sql", "r", encoding="utf-8") as f:
+                sql = f.read()
+                cursor.execute(sql)
+        except UnicodeDecodeError:
+            with open("calculate_pagerank.sql", "r", encoding="latin-1") as f:
+                sql = f.read()
+                cursor.execute(sql)
 
         sync_conn.commit()
 
