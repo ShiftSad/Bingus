@@ -26,6 +26,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@types/pg": "^8.15.2",
     "@xenova/transformers": "^2.17.2",
+    "cache-manager": "^6.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "pg": "^8.16.0",

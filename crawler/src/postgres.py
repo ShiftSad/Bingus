@@ -72,7 +72,7 @@ def getCrawledUrls(crawledUrls):
 
 def getPlainText(limit=1000):
     cursor = sync_conn.cursor()
-    cursor.execute("SELECT url, plaintext FROM crawled_urls WHERE plaintext IS NOT NULL AND embedding IS NULL LIMIT %s", (limit,))
+    cursor.execute("SELECT url, plaintext FROM crawled_urls WHERE plaintext IS NOT NULL AND embedding IS NULL ORDER BY id DESC LIMIT %s", (limit,))
     rows = cursor.fetchall()
     cursor.close()
     return rows

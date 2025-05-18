@@ -4,8 +4,15 @@ meta {
   seq: 1
 }
 
-get {
+post {
   url: http://localhost:3000/search/query
-  body: none
+  body: json
   auth: inherit
+}
+
+body:json {
+  {
+    "query": "Minecraft roblox mod",
+    "limit": 100
+  }
 }
