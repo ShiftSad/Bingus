@@ -36,16 +36,21 @@ async def search(query: str, limit: int = 10) -> List[Tuple[str, float, str]]:
         results = await conn.fetch(
             """
             SELECT 
-                url,
-                1 - (embedding <=> $1::vector) AS similarity,
-                rank AS pagerank,
-                plaintext
+            url,
+            CASE WHEN 1 - (embedding <=> $1::vector) = 1 THEN 0
+             ELSE 1 - (embedding <=> $1::vector)
+            END AS similarity,
+            rank AS pagerank,
+            plaintext
             FROM 
-                crawled_urls
+            crawled_urls
             WHERE 
-                embedding IS NOT NULL
+            embedding IS NOT NULL
+            AND 1 - (embedding <=> $1::vector) < 1.0
             ORDER BY 
-                (0.7 * (1 - (embedding <=> $1::vector))) + (0.3 * rank) DESC
+            (0.7 * (CASE WHEN 1 - (embedding <=> $1::vector) = 1 THEN 0
+                 ELSE 1 - (embedding <=> $1::vector)
+                END)) + (0.3 * rank) DESC
             LIMIT $2
             """,
             embedding_vector,
