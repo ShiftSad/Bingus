@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Engine</title>
+    <script type="module" src="/src/main.ts"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            align-items: center;
+            justify-content: center;
+            background-color: #fff;
+        }
+        .logo {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .logo img {
+            width: 272px;
+            height: auto;
+        }
+        .search-container {
+            width: 100%;
+            max-width: 584px;
+        }
+        .search-bar {
+            border-radius: 24px;
+            box-shadow: 0 1px 6px rgba(32, 33, 36, 0.08);
+            border: 1px solid #dfe1e5;
+        }
+        .search-bar:hover, .search-bar:focus-within {
+            box-shadow: 0 1px 6px rgba(32, 33, 36, 0.2);
+            border-color: rgba(223, 225, 229, 0);
+        }
+        .search-input {
+            border: none;
+            box-shadow: none;
+            font-size: 16px;
+        }
+        .search-input:focus {
+            box-shadow: none;
+            border: none;
+        }
+        .mic-icon {
+            color: #4285f4;
+            font-size: 1.25rem;
+            cursor: pointer;
+        }
+        .search-buttons {
+            margin-top: 20px;
+        }
+        .search-btn {
+            background-color: #f8f9fa;
+            border: 1px solid #f8f9fa;
+            color: #3c4043;
+        }
+        .search-btn:hover {
+            box-shadow: 0 1px 1px rgba(0,0,0,.1);
+            border: 1px solid #dadce0;
+        }
+        .bingus-font {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(45deg, #ff0000, #ff3333, #ff6666, #ff9999);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-size: 3.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-12 text-center logo">
+                <h1 class="display-4 fw-bold"><span class="bingus-font">Bingus</span></h1>
+            </div>
+            
+            <div class="col-md-8 col-lg-6 search-container">
+                <form action="/search.html" method="GET">
+                    <div class="input-group search-bar p-1">
+                        <input type="text" class="form-control search-input py-2" name="q" autocomplete="true" placeholder="Search the web">
+                        <span class="input-group-text bg-transparent border-0">
+                            <i class="bi bi-mic-fill mic-icon"></i>
+                        </span>
+                    </div>
+                    
+                    <div class="d-flex justify-content-center mt-4 search-buttons">
+                        <button type="submit" class="btn search-btn mx-2">Search</button>
+                        <button type="button" class="btn search-btn mx-2">I'm Feeling Lucky</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
