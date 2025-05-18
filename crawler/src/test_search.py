@@ -1,3 +1,4 @@
+import time
 from sentence_transformers import SentenceTransformer
 import torch
 import asyncio
@@ -23,10 +24,15 @@ async def search(query: str, limit: int = 10) -> List[Tuple[str, float, str]]:
     Returns:
         List of tuples containing (url, score, snippet)
     """
-    # Get embedding for the query
+    # Time the embedding process
+    embed_start = time.time()
     embedding = model.encode(query, show_progress_bar=False, device=device)
     embedding_str = ','.join(map(str, embedding.tolist()))
     embedding_vector = f'[{embedding_str}]'
+    embed_time = time.time() - embed_start
+    
+    # Time the database search
+    search_start = time.time()
     
     # Connect to database
     conn = await asyncpg.connect(DATABASE_URL)
@@ -48,9 +54,7 @@ async def search(query: str, limit: int = 10) -> List[Tuple[str, float, str]]:
             embedding IS NOT NULL
             AND 1 - (embedding <=> $1::vector) < 1.0
             ORDER BY 
-            (0.7 * (CASE WHEN 1 - (embedding <=> $1::vector) = 1 THEN 0
-                 ELSE 1 - (embedding <=> $1::vector)
-                END)) + (0.3 * rank) DESC
+            (0.7 * (CASE WHEN 1 - (embedding <=> $1::vector) = 1 THEN 0 ELSE 1 - (embedding <=> $1::vector) END)) + (0.3 * rank) DESC
             LIMIT $2
             """,
             embedding_vector,
@@ -69,7 +73,9 @@ async def search(query: str, limit: int = 10) -> List[Tuple[str, float, str]]:
             
             search_results.append((url, float(score), snippet))
         
-        return search_results
+        search_time = time.time() - search_start
+        
+        return search_results, embed_time, search_time
     
     finally:
         await conn.close()
@@ -80,9 +86,12 @@ async def main():
         if query.lower() == 'exit':
             break
             
-        results = await search(query)
+        results, embed_time, search_time = await search(query)
         
-        print(f"\nSearch results for '{query}':\n")
+        print(f"\nSearch results for '{query}':")
+        print(f"Embedding time: {embed_time:.4f} seconds")
+        print(f"Database search time: {search_time:.4f} seconds\n")
+        
         for i, (url, score, snippet) in enumerate(results, 1):
             print(f"{i}. {url} (Score: {score:.4f})")
             print(f"   {snippet}\n")

@@ -124,6 +124,11 @@ async def main():
             "https://pt.wikipedia.org/wiki/Minecraft",
             "https://docs.python.org/3.9/library/asyncio-task.html",
             "https://medium.com/@luanrubensf/concurrent-map-access-in-go-a6a733c5ffd1",
+            "https://www.trydent.com.br/",
+            "https://craftsapiens.com.br/",
+            "https://www.xpi.com.br/",
+            "https://news.google.com/home?hl=pt-BR&gl=BR&ceid=BR:pt-419",
+            "https://saladofuturo.educacao.sp.gov.br/escolha-de-perfil"
         ]
         saved_urls.extend(startingPoints)
 
