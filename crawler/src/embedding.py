@@ -15,7 +15,7 @@ async def embed_text(url: str, text: str):
 
 
 async def main():
-    plainTexts = getPlainText(100)
+    plainTexts = getPlainText(1000)
     count = 0
     
     for url, text in plainTexts:
@@ -26,6 +26,7 @@ async def main():
         except Exception as e:
             print(f"Error embedding {url}: {e}")
 
+    await asyncio.sleep(0.5)
     await main()
 
 
