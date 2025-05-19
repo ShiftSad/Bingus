@@ -30,6 +30,7 @@ export class SearchService implements OnModuleInit {
             idleTimeoutMillis: 30000,
         });
     }
+    
     async onModuleInit() {
         this.embedder = await pipeline('feature-extraction', 'sentence-transformers/all-mpnet-base-v2', {
             revision: 'main',

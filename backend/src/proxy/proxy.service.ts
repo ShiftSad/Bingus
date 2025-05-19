@@ -1,7 +1,28 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Pool } from 'pg';
 
 @Injectable()
 export class ProxyService {
+    private pool: Pool;
+
+    constructor(
+        private config: ConfigService,
+    ) {
+        // Initialize PostgreSQL connection pool
+        this.pool = new Pool({
+            host: this.config.get('DB_HOST'),
+            port: parseInt(this.config.get('DB_PORT') || '5432', 10),
+            user: this.config.get('DB_USERNAME'),
+            password: this.config.get('DB_PASSWORD'),
+            database: this.config.get('DB_NAME'),
+            max: 20,
+            min: 2,
+            idleTimeoutMillis: 30000,
+        });
+    }
+
+
     async fetchData(url: string): Promise<any> {
         try {
             const response = await fetch(url, {
@@ -24,17 +45,37 @@ export class ProxyService {
         }
     }
 
-    async fetchDataWithHeaders(url: string, headers: Record<string, string>): Promise<any> {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                ...headers,
-                'Content-Type': 'application/json',
-            },
-        });
-        if (!response.ok) {
-            throw new Error(`Error fetching data: ${response.statusText}`);
+    
+    getTitleFromHtml(html: string): string {
+        const titleRegex = /<title[^>]*>(.*?)<\/title>/i;
+        const titleMatch = html.match(titleRegex);
+        return titleMatch ? titleMatch[1].trim() : 'No title found';
+    }
+
+
+    async getPageTitle(url: string): Promise<string> {
+        const query = `
+            SELECT title
+            FROM url_titles
+            WHERE url = $1
+            LIMIT 1
+        `;
+
+        const result = await this.pool.query(query, [url]);
+        if (result.rows.length > 0) {
+            return result.rows[0].title;
         }
-        return response.json();
+
+        const data = await this.fetchData(url);
+        const pageTitle = this.getTitleFromHtml(data);
+
+        const insertQuery = `
+            INSERT INTO url_titles (url, title)
+            VALUES ($1, $2)
+            ON CONFLICT DO NOTHING
+        `;
+
+        await this.pool.query(insertQuery, [url, pageTitle]);
+        return pageTitle;
     }
 }

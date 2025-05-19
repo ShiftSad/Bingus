@@ -15,13 +15,8 @@ export class ProxyController {
         }
         
         try {
-            const data = await this.proxyService.fetchData(url);
-            
-            const titleRegex = /<title[^>]*>(.*?)<\/title>/i;
-            const titleMatch = data.match(titleRegex);
-            const pageTitle = titleMatch ? titleMatch[1].trim() : 'No title found';
-            
-            return { title: pageTitle };
+            const title = await this.proxyService.getPageTitle(url);
+            return { title: title };
         } catch (error) {
             console.error(`Error fetching ${url}:`, error);
             return { 
