@@ -11,7 +11,11 @@ export class ProxyService {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
+                return {
+                    status: response.status,
+                    statusText: response.statusText,
+                    message: 'Error fetching data from the URL'
+                }
             }
             return await response.text();
         } catch (error) {
