@@ -1,0 +1,17 @@
+api.shiftsad.dev {
+    encode gzip
+    reverse_proxy backend:3000
+
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+}
+
+bingus.shiftsad.dev {
+    encode gzip
+    reverse_proxy frontend:80
+
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+}
