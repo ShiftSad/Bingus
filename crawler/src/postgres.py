@@ -14,7 +14,7 @@ async def get_pool():
         POOL = await asyncpg.create_pool(
             DATABASE_URL,
             min_size=5,
-            max_size=20,
+            max_size=80,
             max_inactive_connection_lifetime=300.0,
         )
     return POOL
@@ -48,15 +48,24 @@ def create_table():
             CONSTRAINT no_self_references CHECK (from_url <> to_url)
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS url_titles (
+                id SERIAL PRIMARY KEY,
+                url TEXT NOT NULL,
+                title TEXT NOT NULL,
+                UNIQUE (url, title),
+                FOREIGN KEY (url) REFERENCES crawled_urls (url) ON DELETE CASCADE
+            )
+        """)
 
-        try:
-            with open("calculate_pagerank.sql", "r", encoding="utf-8") as f:
-                sql = f.read()
-                cursor.execute(sql)
-        except UnicodeDecodeError:
-            with open("calculate_pagerank.sql", "r", encoding="latin-1") as f:
-                sql = f.read()
-                cursor.execute(sql)
+        # try:
+        #     with open("calculate_pagerank.sql", "r", encoding="utf-8") as f:
+        #         sql = f.read()
+        #         cursor.execute(sql)
+        # except UnicodeDecodeError:
+        #     with open("calculate_pagerank.sql", "r", encoding="latin-1") as f:
+        #         sql = f.read()
+        #         cursor.execute(sql)
 
         sync_conn.commit()
 
@@ -76,6 +85,37 @@ def getPlainText(limit=1000):
     rows = cursor.fetchall()
     cursor.close()
     return rows
+
+
+# Get URLs without titles
+def getUrlsWithoutTitleCount(limit=1000):
+    cursor = sync_conn.cursor()
+    cursor.execute("""
+        SELECT url FROM crawled_urls
+        WHERE url NOT IN (SELECT url FROM url_titles)
+        AND plaintext IS NOT NULL
+        ORDER BY id DESC
+        LIMIT %s
+    """, (limit,))
+    rows = cursor.fetchall()
+    cursor.close()
+    return [row[0] for row in rows]
+
+
+async def insert_titles(titles):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            await conn.executemany(
+                """
+                INSERT INTO url_titles (url, title)
+                VALUES ($1, $2)
+                ON CONFLICT (url, title) DO NOTHING
+                """,
+                titles
+            )
+        except Exception as e:
+            print(f"Error inserting titles: {e}")
 
 
 async def saveEmbedding(url, embedding):

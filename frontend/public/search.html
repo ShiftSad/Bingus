@@ -57,41 +57,64 @@
             font-size: 1.25rem;
             cursor: pointer;
         }
+        
         .search-results {
             padding: 20px 0;
         }
         .result-item {
-            margin-bottom: 25px;
+            margin-bottom: 28px;
+            padding: 12px;
+            border-radius: 8px;
+            transition: background-color 0.15s ease;
+        }
+        .result-item:hover {
+            background-color: #f8f9fa;
+        }
+        .result-url-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .result-favicon {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            border-radius: 2px;
         }
         .result-url {
             color: #3c4043;
             font-size: 14px;
-            margin-bottom: 4px;
-            display: block;
             text-decoration: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 500px;
         }
         .result-title {
             color: #1a0dab;
-            font-size: 18px;
-            margin-bottom: 4px;
+            font-size: 20px;
+            font-weight: 500;
+            margin-bottom: 6px;
             text-decoration: none;
             display: block;
+            line-height: 1.3;
         }
         .result-title:hover {
             text-decoration: underline;
         }
         .result-snippet {
             color: #4d5156;
-            font-size: 14px;
+            font-size: 15px;
             line-height: 1.58;
         }
         .similarity-badge {
             font-size: 12px;
-            background-color: #f0f0f0;
-            color: #666;
-            padding: 2px 6px;
-            border-radius: 10px;
-            margin-left: 8px;
+            background-color: #ebf3fb;
+            color: #1a73e8;
+            padding: 3px 8px;
+            border-radius: 12px;
+            margin-left: 10px;
+            font-weight: 500;
         }
         .loading {
             text-align: center;
@@ -113,7 +136,7 @@
         <div class="header">
             <div class="row align-items-center">
                 <div class="col-auto ms-3">
-                    <a href="/" class="text-decoration-none">
+                    <a href="/index.html" class="text-decoration-none">
                         <h1 class="mb-0 bingus-font-small">Bingus</h1>
                     </a>
                 </div>

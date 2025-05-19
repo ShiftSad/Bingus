@@ -38,7 +38,7 @@ export class SearchService implements OnModuleInit {
         });
     }
 
-    async search(searchTerm: string, limit: number = 10): Promise<SearchResult[]> {
+    async search(searchTerm: string, limit: number, start: number = 0): Promise<SearchResult[]> {
         try {
             let embeddingVector: string;
             if (!this.embeddingCache.has(searchTerm)) {
@@ -49,10 +49,10 @@ export class SearchService implements OnModuleInit {
                 this.embeddingCache.set(searchTerm, `[${embeddingStr}]`);
             }
             embeddingVector = this.embeddingCache.get(searchTerm) as string;
-
+        
             const overfetchFactor = 5;
             const candidatesLimit = limit * overfetchFactor;
-
+        
             const query = `
                 WITH vector_candidates AS (
                     SELECT
@@ -61,7 +61,7 @@ export class SearchService implements OnModuleInit {
                         embedding, 
                         rank,      
                         plaintext,
-                        (embedding <=> $1::vector) AS cosine_distance -- Calculate distance once
+                        (embedding <=> $1::vector) AS cosine_distance -- Calculate distan
                     FROM
                         crawled_urls
                     WHERE
@@ -80,10 +80,11 @@ export class SearchService implements OnModuleInit {
                     vector_candidates vc
                 ORDER BY
                     (0.7 * (1 - vc.cosine_distance)) + (0.3 * vc.rank) DESC
-                LIMIT $2;
+                LIMIT $2
+                OFFSET $4;
             `;
-
-            const result = await this.pool.query(query, [embeddingVector, limit, candidatesLimit]);
+        
+            const result = await this.pool.query(query, [embeddingVector, limit, candidatesLimit, start]);
             
             // Process and format results
             return result.rows.map(row => ({

@@ -1,0 +1,15 @@
+meta {
+  name: Proxy
+  type: http
+  seq: 3
+}
+
+get {
+  url: http://localhost:3000/proxy?url=https://google.com
+  body: json
+  auth: inherit
+}
+
+params:query {
+  url: https://google.com
+}

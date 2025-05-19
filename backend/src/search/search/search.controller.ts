@@ -10,7 +10,7 @@ export class SearchController {
 
     @Post("query")
     async query(@Body() body: SearchDto): Promise<SearchResult[]> {
-        const { query, limit } = body;
-        return this.searchService.search(query, limit);
+        const { query, limit, start } = body;
+        return this.searchService.search(query, limit, start);
     }
 }
