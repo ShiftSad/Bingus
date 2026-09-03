@@ -4,7 +4,7 @@ from collections import Counter
 
 import asyncpg
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from bingus.api import db, metrics
 from bingus.api.deps import GzipRoute, worker
@@ -46,11 +46,21 @@ class PageResult(BaseModel):
     chunks: list[Chunk] = []
     links: list[str] = []  # já normalizadas
 
+    @field_validator("title", "text")
+    @classmethod
+    def no_nul(cls, v: str | None) -> str | None:
+        return v.replace("\x00", "") if v else v  # Postgres recusa \x00 em text
+
 
 class HostResult(BaseModel):
     robots: str | None = None  # None = não buscou desta vez
     crawl_delay: float = 1.0
     sitemaps: bool = False  # leu os sitemaps nesta rodada
+
+    @field_validator("robots")
+    @classmethod
+    def no_nul(cls, v: str | None) -> str | None:
+        return v.replace("\x00", "") if v else v
 
 
 class FetchResults(BaseModel):

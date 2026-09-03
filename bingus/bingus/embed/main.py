@@ -18,7 +18,7 @@ MODEL = os.environ.get("BINGUS_EMBED_MODEL", "perplexity-ai/pplx-embed-v1-0.6b")
 DIMS = 512  # Matryoshka: metade do modelo, metade do armazenamento
 TOKENS = int(os.environ.get("BINGUS_EMBED_TOKENS", "2048"))
 BATCH = int(os.environ.get("BINGUS_EMBED_BATCH", "8"))  # chunks por passada na GPU
-LEASE = int(os.environ.get("BINGUS_EMBED_LEASE", "64"))  # chunks por lote da API
+LEASE = int(os.environ.get("BINGUS_EMBED_LEASE", "64"))  # chunks por lote da API; 0 = só queries
 PORT = int(os.environ.get("BINGUS_EMBED_PORT", "8100"))  # queries de busca
 
 
@@ -101,6 +101,9 @@ def main() -> None:
     )
 
     async def run() -> None:
-        await asyncio.gather(work(api, emb, stats), stats.run(api), server.serve())
+        tasks = [stats.run(api), server.serve()]
+        if LEASE:  # GPU fraca serve só a busca, sem lote na frente das queries
+            tasks.append(work(api, emb, stats))
+        await asyncio.gather(*tasks)
 
     asyncio.run(run())
