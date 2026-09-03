@@ -81,7 +81,7 @@ LEASE_HOSTS = """
 WITH picked AS (
     SELECT host FROM hosts
     WHERE NOT blocked AND next_due <= now() AND (leased_until IS NULL OR leased_until < now())
-    ORDER BY (page_count = 0) DESC, (host LIKE '%.br') DESC, next_due
+    ORDER BY seeded DESC, (page_count = 0) DESC, (host LIKE '%.br') DESC, next_due
     LIMIT $1
     FOR UPDATE SKIP LOCKED
 )
@@ -245,13 +245,14 @@ async def seed(body: Seed, name: str = Depends(worker)):
     links: Links = {}
     for url in body.urls:
         add_link(links, url, 0)
+    hosts = list({host for _, host, _ in links.values()})
     async with db.pool().acquire() as conn, conn.transaction():
         added = await add_frontier(conn, links)
-        if body.langs:
-            hosts = list({host for _, host, _ in links.values()})
-            await conn.execute(
-                "UPDATE hosts SET langs = $2 WHERE host = ANY($1)", hosts, body.langs
-            )
+        await conn.execute(  # semeado passa na frente da fila de hosts
+            "UPDATE hosts SET seeded = true, langs = coalesce($2, langs) WHERE host = ANY($1)",
+            hosts,
+            body.langs,
+        )
     return {"added": added}
 
 

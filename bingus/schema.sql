@@ -18,6 +18,7 @@ CREATE TABLE hosts (
     sitemaps_at  timestamptz,                  -- null = sitemaps ainda não lidos
     rank         real NOT NULL DEFAULT 0,
     blocked      boolean NOT NULL DEFAULT false,
+    seeded       boolean NOT NULL DEFAULT false, -- veio de /fetch/seed: passa na frente da fila
     next_due     timestamptz NOT NULL DEFAULT now(),  -- trabalho mais antigo pendente no host
     leased_until timestamptz                  -- host entregue a um fetch worker
 );

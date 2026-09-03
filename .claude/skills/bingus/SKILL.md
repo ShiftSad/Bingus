@@ -139,7 +139,9 @@ Endpoints em `bingus/api/fetch.py`. Os modelos pydantic lá são a definição d
   e `robots` de cada host. Host sem `robots` é novo: o worker busca o robots.txt e devolve.
 - `POST /fetch/results`: `pages` com o resultado de cada URL, `hosts` com robots e crawl_delay
   descobertos, `urls` achadas em sitemaps. Corpo JSON com gzip.
-- `POST /fetch/seed`: lista de URLs para a frontier, profundidade 0.
+- `POST /fetch/seed`: lista de URLs para a frontier, profundidade 0. Marca os hosts como
+  `seeded`, e a lease de hosts os serve antes de qualquer outro: sem isso, 90 mil hosts `.br`
+  novos deixavam as fontes de IA semeadas sem nenhuma visita.
 - `POST /metrics`: amostras de telemetria do worker, a cada ~10 s, mesma chave.
 - `GET /health`.
 
