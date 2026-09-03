@@ -1,8 +1,8 @@
-# Borda pública. No cenário com VPS na frente do dedicado, troque api:8000 e frontend:80
-# pelos endereços da WireGuard.
+# Borda pública, no VPS. O dedicado só escuta na WireGuard: API em 10.10.0.2:2026 e
+# frontend em 10.10.0.2:2027 (BINGUS_API_BIND e BINGUS_WEB_BIND na .env do dedicado).
 api.shiftsad.dev {
     encode gzip
-    reverse_proxy api:8000
+    reverse_proxy 10.10.0.2:2026
 
     tls {
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
@@ -11,7 +11,7 @@ api.shiftsad.dev {
 
 bingus.shiftsad.dev {
     encode gzip
-    reverse_proxy frontend:80
+    reverse_proxy 10.10.0.2:2027
 
     tls {
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}

@@ -275,7 +275,11 @@ perfil `workers` sobe fetch e embed na mesma máquina, o embed com a GPU via too
 
 `.env` de produção: `POSTGRES_*`, `DATABASE_URL` com `postgres` como host, `BINGUS_API_KEYS` com
 uma chave por worker, `BINGUS_FETCH_KEY` e `BINGUS_EMBED_KEY` para os workers do compose,
-`BINGUS_EMBED_URL=http://embed:8100`, `OPENROUTER_KEY`, `VITE_API_URL`.
+`BINGUS_EMBED_URL=http://embed:8100`, `OPENROUTER_KEY`, `VITE_API_URL`, e os binds no host:
+`BINGUS_API_BIND=10.10.0.2:2026` e `BINGUS_WEB_BIND=10.10.0.2:2027`, o IP da WireGuard do dedicado.
+Sem essas duas, o padrão é loopback nas portas 8000 e 8080. Nada do Bingus escuta na interface
+pública; quem fala com a internet é o Caddy do VPS, pela WireGuard. Como o Docker faz bind no IP
+da wg0, ela precisa estar de pé antes do compose subir no boot.
 
 Migrar o banco do PC para o dedicado, nesta ordem:
 
@@ -283,9 +287,10 @@ Migrar o banco do PC para o dedicado, nesta ordem:
 2. `docker compose exec -T postgres pg_dump -U bingus -Fc bingus > bingus.dump`. Custom format,
    comprimido, uns 40% do tamanho do banco. Os índices são recriados no restore.
 3. Copiar o dump para o dedicado. No dedicado, `docker compose up -d postgres` cria o banco vazio
-   com o `schema.sql`; depois
-   `docker compose exec -T postgres pg_restore -U bingus -d bingus --clean --if-exists --no-owner -j 4 < bingus.dump`.
-   As extensões já existem, os avisos sobre elas são normais.
+   com o `schema.sql`; depois `docker compose cp bingus.dump postgres:/tmp/bingus.dump` e
+   `docker compose exec postgres pg_restore -U bingus -d bingus --clean --if-exists --no-owner -j 4 /tmp/bingus.dump`.
+   Restore paralelo não aceita stdin, por isso a cópia. As extensões já existem, os avisos sobre
+   elas são normais. Apague o `/tmp/bingus.dump` do container no fim.
 4. `docker compose up -d api frontend` e, se a GPU estiver configurada,
    `docker compose --profile workers up -d`.
 5. No PC, workers apontando para a API do dedicado pela WireGuard ou pelo Caddy.

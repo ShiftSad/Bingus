@@ -36,7 +36,7 @@ services:
     env_file: .env
     command: bingus-api
     ports:
-      - "8000:8000"
+      - "${BINGUS_API_BIND:-127.0.0.1:8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,8 +46,8 @@ services:
       context: ./frontend
       args:
         VITE_API_URL: ${VITE_API_URL:-https://api.shiftsad.dev}
-    expose:
-      - "80"
+    ports:
+      - "${BINGUS_WEB_BIND:-127.0.0.1:8080}:80"
 
   # Workers na mesma máquina: docker compose --profile workers up -d
   fetch:
