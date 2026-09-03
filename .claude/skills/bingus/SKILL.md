@@ -270,6 +270,11 @@ usuário só de leitura. Três tabelas, todas com retenção de 90 dias, limpas 
 Rankings como hosts com mais páginas ou páginas com maior rank são consultas diretas nas
 tabelas principais. Capriche no dashboard: taxa por worker, taxa de sucesso, bytes por segundo.
 
+O dashboard está em `grafana/bingus.json`, para importar no Grafana com a datasource Postgres
+escolhida na variável `DS`. Buckets de 1 minuto; as taxas por segundo dividem a soma por 60.
+Ao mexer, valide cada query no psql trocando `$__timeGroupAlias` por `date_trunc` e
+`$__timeFilter` por um filtro de data.
+
 ## Deploy no dedicado
 
 Imagens no Docker Hub: `shiftsad/bingus:api`, `:fetch`, `:embed`. O compose usa as imagens; o

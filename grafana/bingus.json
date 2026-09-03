@@ -1,0 +1,810 @@
+{
+  "title": "Bingus",
+  "uid": "bingus",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "DS",
+        "label": "Postgres",
+        "type": "datasource",
+        "query": "grafana-postgres-datasource",
+        "current": {},
+        "options": [],
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Estado",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Páginas",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT pages AS value FROM api_samples ORDER BY at DESC LIMIT 1",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Frontier",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT frontier AS value FROM api_samples ORDER BY at DESC LIMIT 1",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Chunks sem embedding",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT chunks_pending AS value FROM api_samples ORDER BY at DESC LIMIT 1",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Hosts",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT hosts AS value FROM api_samples ORDER BY at DESC LIMIT 1",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Hosts vencidos",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT hosts_due AS value FROM api_samples ORDER BY at DESC LIMIT 1",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Hosts em lease",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT hosts_leased AS value FROM api_samples ORDER BY at DESC LIMIT 1",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Páginas e frontier",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), avg(pages) AS \"páginas\", avg(frontier) AS \"frontier\"\nFROM api_samples WHERE $__timeFilter(at) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Chunks sem embedding",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), avg(chunks_pending) AS \"pendentes\"\nFROM api_samples WHERE $__timeFilter(at) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Workers",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Páginas por segundo",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), worker AS metric, sum(pages) / 60.0 AS value\nFROM worker_samples WHERE $__timeFilter(at) GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Download",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), worker AS metric, sum(bytes) / 60.0 AS value\nFROM worker_samples WHERE $__timeFilter(at) GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Requisições por segundo",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), worker AS metric, sum(requests) / 60.0 AS value\nFROM worker_samples WHERE $__timeFilter(at) GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "CPU por worker (núcleos)",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), worker AS metric, avg(cpu) AS value\nFROM worker_samples WHERE $__timeFilter(at) GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Erros por minuto, por tipo",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 22,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(s.at, '1m'), e.key AS metric, sum(e.value::int) AS value\nFROM worker_samples s, jsonb_each_text(s.errors) e\nWHERE $__timeFilter(s.at) GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Chunks embedados por minuto",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 22,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), worker AS metric, sum(chunks_embedded) AS value\nFROM batches WHERE $__timeFilter(at) AND chunks_embedded > 0 GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "Ingestão",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Desfecho das páginas por minuto",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(at, '1m'),\n       sum(pages_new) AS \"novas\", sum(pages_changed) AS \"mudaram\",\n       sum(pages_unchanged) AS \"iguais\", sum(pages_failed) AS \"falharam\",\n       sum(pages_foreign) AS \"outro idioma\"\nFROM batches WHERE $__timeFilter(at) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 40
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Taxa de sucesso",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 31,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(at, '1m'),\n       100.0 * sum(pages_new + pages_changed + pages_unchanged)\n       / nullif(sum(pages_new + pages_changed + pages_unchanged + pages_failed + pages_foreign), 0) AS \"sucesso\"\nFROM batches WHERE $__timeFilter(at) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Tempo de ingestão por lote",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), avg(ms) AS \"média\", max(ms) AS \"máximo\"\nFROM batches WHERE $__timeFilter(at) AND chunks_embedded = 0 GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Frontier e chunks enfileirados por minuto",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 39,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), sum(frontier_added) AS \"urls novas\", sum(chunks_queued) AS \"chunks\"\nFROM batches WHERE $__timeFilter(at) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 22,
+      "type": "row",
+      "title": "Rankings",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 47,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 23,
+      "type": "table",
+      "title": "Hosts com mais páginas",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 12,
+        "h": 12
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT host, page_count AS \"páginas\", pt_count AS \"pt\", round(rank::numeric, 3) AS rank, blocked\nFROM hosts ORDER BY page_count DESC LIMIT 30",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 24,
+      "type": "table",
+      "title": "Páginas com maior rank",
+      "datasource": {
+        "type": "grafana-postgres-datasource",
+        "uid": "${DS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 12,
+        "h": 12
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgres-datasource",
+            "uid": "${DS}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT url, title AS \"título\", round(rank::numeric, 3) AS rank, fetched_at\nFROM pages WHERE status = 200 ORDER BY rank DESC LIMIT 30",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    }
+  ]
+}
