@@ -46,7 +46,7 @@ docker build --build-arg EXTRA=fetch -t bingus-fetch bingus/
 docker run -d -e BINGUS_API_URL=https://... -e BINGUS_API_KEY=... bingus-fetch bingus-fetch
 ```
 
-Fetch worker aceita ainda `BINGUS_HOSTS` e `BINGUS_PER_HOST`, tamanho do lote, e
+Fetch worker aceita ainda `BINGUS_HOSTS`, hosts em voo, `BINGUS_PER_HOST`, `BINGUS_FLUSH` e
 `BINGUS_USER_AGENT`. Localmente: `uv run bingus-fetch` dentro de `bingus/`.
 
 ## Infra
@@ -159,7 +159,8 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
 - Prazo do lease é proporcional ao lote. Expirou, o host volta para a fila.
 - O worker mantém `BINGUS_HOSTS` hosts em voo o tempo todo: cada host libera o slot ao
   terminar, e hosts novos são pedidos em lotes de um quarto do total. Resultados prontos vão
-  juntos num `POST /fetch/results` a cada 5 segundos, porque um POST por host virava dezenas por
+  juntos num `POST /fetch/results` a cada `BINGUS_FLUSH` segundos, padrão 15, porque um POST por
+  host virava dezenas por
   segundo e uma linha em `batches` para cada. Antes o lote inteiro esperava o host mais lento e o
   worker fazia 2 páginas por segundo. Um host recebe no máximo 60 segundos de trabalho por lote.
   Throughput se ajusta em `BINGUS_HOSTS`, não em URLs por host; extração é uma thread só.
