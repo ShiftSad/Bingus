@@ -156,9 +156,11 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
 - Lease de fetch é por host, não por URL. A API nunca entrega o mesmo host a dois workers.
   Dentro do lote o worker respeita `crawl_delay` do host e roda hosts em paralelo.
 - Prazo do lease é proporcional ao lote. Expirou, o host volta para a fila.
-- O lote termina quando o host mais lento termina. Por isso um host recebe no máximo 60 segundos
-  de trabalho por lote, contando o crawl_delay dele. Throughput do worker se ajusta em
-  `BINGUS_HOSTS`, quantos hosts em paralelo por lote, não em URLs por host.
+- O worker mantém `BINGUS_HOSTS` hosts em voo o tempo todo: cada host devolve seu resultado
+  em `POST /fetch/results` ao terminar e o slot é reposto, pedindo hosts novos em lotes de um
+  quarto do total. Antes o lote inteiro esperava o host mais lento e o worker fazia 2 páginas
+  por segundo. Um host recebe no máximo 60 segundos de trabalho por lote, contando o crawl_delay.
+  Throughput se ajusta em `BINGUS_HOSTS`, não em URLs por host; extração é uma thread só.
 - Fetch worker busca `robots.txt` de host desconhecido, aplica localmente e devolve o conteúdo.
   A API guarda e usa para filtrar e dar ritmo. Sitemaps do robots viram URLs de profundidade 0.
 - Resultado de fetch é JSON com gzip: status, headers relevantes, título, texto, idioma, links.

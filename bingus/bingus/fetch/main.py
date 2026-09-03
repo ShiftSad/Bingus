@@ -36,27 +36,47 @@ class Worker:
         self.http = httpx.AsyncClient(
             headers={"User-Agent": UA}, timeout=TIMEOUT, follow_redirects=True, max_redirects=5
         )
+        self.tasks: set[asyncio.Task[None]] = set()  # um por host em voo
+        self.freed = asyncio.Event()
 
     async def run(self) -> None:
+        """Mantém HOSTS hosts em voo. Cada um devolve o resultado ao terminar e libera o slot,
+        em vez de um lote inteiro esperar o host mais lento."""
         while True:
+            free = HOSTS - len(self.tasks)
+            if free < max(1, HOSTS // 4):  # pede em lotes, não um host por vez
+                self.freed.clear()
+                await self.freed.wait()
+                continue
             try:
-                await self.batch()
+                batch = await self.api.post_json(
+                    f"/fetch/batch?hosts={free}&per_host={PER_HOST}", {}
+                )
             except Exception as e:
                 log.warning("batch failed: %s", e)
                 await asyncio.sleep(30)
+                continue
+            if not batch["hosts"]:
+                log.info("no work, waiting")
+                await asyncio.sleep(30)
+                continue
+            for h in batch["hosts"]:
+                task = asyncio.create_task(self.crawl(h))
+                self.tasks.add(task)
+                task.add_done_callback(self.tasks.discard)
 
-    async def batch(self) -> None:
-        batch = await self.api.post_json(f"/fetch/batch?hosts={HOSTS}&per_host={PER_HOST}", {})
-        if not batch["hosts"]:
-            log.info("no work, waiting")
-            await asyncio.sleep(30)
-            return
-        results = await asyncio.gather(*(self.crawl_host(h) for h in batch["hosts"]))
-        pages = [p for r in results for p in r["pages"]]
-        hosts = {r["host"]: r["info"] for r in results if r["info"]}
-        urls = [u for r in results for u in r["urls"]]
-        await self.api.post_json("/fetch/results", {"pages": pages, "hosts": hosts, "urls": urls})
-        log.info("%d hosts, %d pages, %d sitemap urls", len(results), len(pages), len(urls))
+    async def crawl(self, h: dict[str, Any]) -> None:
+        try:
+            r = await self.crawl_host(h)
+            hosts = {r["host"]: r["info"]} if r["info"] else {}
+            await self.api.post_json(
+                "/fetch/results", {"pages": r["pages"], "hosts": hosts, "urls": r["urls"]}
+            )
+            log.info("%s: %d pages, %d sitemap urls", r["host"], len(r["pages"]), len(r["urls"]))
+        except Exception as e:
+            log.warning("%s failed: %s", h["host"], e)
+        finally:
+            self.freed.set()
 
     async def crawl_host(self, h: dict[str, Any]) -> dict[str, Any]:
         host, delay, robots = h["host"], h["crawl_delay"], h["robots"]

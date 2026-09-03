@@ -208,7 +208,7 @@
     {
       "id": 6,
       "type": "stat",
-      "title": "Hosts vencidos",
+      "title": "Hosts na fila",
       "datasource": {
         "type": "grafana-postgres-datasource",
         "uid": "${DS}"
@@ -245,7 +245,8 @@
         },
         "colorMode": "none",
         "graphMode": "none"
-      }
+      },
+      "description": "Hosts prontos para crawl: quase todos são hosts novos, descobertos por links, à espera da primeira visita."
     },
     {
       "id": 7,
