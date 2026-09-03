@@ -172,7 +172,9 @@ frontend e o MCP chamam. Híbrida:
 - BM25 nas páginas, via `bm25 <&> to_bm25query(...)`, 200 candidatos. O índice só devolve
   até `bm25_catalog.bm25_limit`, padrão 100, então a consulta faz `SET LOCAL` para 200.
 - Vetorial nos chunks, com a query embedada pelo embed worker em `BINGUS_EMBED_URL`, 200
-  candidatos, melhor chunk por página. Embed worker fora do ar: cai para BM25 só.
+  candidatos, melhor chunk por página. Embed worker fora do ar: cai para BM25 só, e a resposta
+  avisa em `warnings`, lista de frases que o frontend mostra em alerta amarelo. BM25 falhando
+  também entra ali; os dois juntos viram 503 com `detail`, que o frontend mostra em vermelho.
 - Vetor da query em cache de RAM por 24 horas, chave é a query em minúsculas com espaços
   normalizados, até 10 mil entradas. Query repetida não toca a GPU.
 - Paginação por `offset` sobre a lista fundida; `has_more` diz se há mais. O frontend faz

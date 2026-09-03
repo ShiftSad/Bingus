@@ -20,6 +20,7 @@ interface Page {
     has_more: boolean;
     results: Result[];
     timings: Record<string, number>;
+    warnings: string[];
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -79,10 +80,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const started = performance.now();
             const params = `q=${encodeURIComponent(q)}&limit=${LIMIT}&offset=${from}&summaries=${summaries.checked}`;
             const r = await fetch(`${API_URL}/search?${params}`);
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            if (!r.ok) {
+                const body = await r.json().catch(() => null);
+                throw new Error(body?.detail ?? `A API respondeu ${r.status}.`);
+            }
             const page = (await r.json()) as Page;
             if (q !== current) return; // o usuário já buscou outra coisa
             loading.classList.add('d-none');
+            if (from === 0) {
+                results.innerHTML = page.warnings
+                    .map((w) => `<div class="alert alert-warning">${w}</div>`)
+                    .join('');
+            }
             if (from === 0 && page.results.length === 0) {
                 noResults.classList.remove('d-none');
                 return;
@@ -93,7 +102,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     .filter(([k]) => k !== 'total')
                     .map(([k, v]) => `${k} ${v} ms`)
                     .join(' · ');
-                results.innerHTML = `<div class="text-muted small mb-3">${ms} ms no total · ${parts}</div>`;
+                results.insertAdjacentHTML(
+                    'beforeend',
+                    `<div class="text-muted small mb-3">${ms} ms no total · ${parts}</div>`,
+                );
             }
             for (const item of page.results) results.appendChild(render(item));
             offset = from + page.results.length;
@@ -102,7 +114,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             console.error(err);
             loading.classList.add('d-none');
-            const msg = `<div class="alert alert-danger">Erro ao buscar. A API está no ar em ${API_URL}?</div>`;
+            const text = err instanceof TypeError ? `Sem resposta da API em ${API_URL}.` : (err as Error).message;
+            const msg = `<div class="alert alert-danger">${text}</div>`;
             if (from === 0) results.innerHTML = msg;
             else sentinel.innerHTML = msg;
         } finally {

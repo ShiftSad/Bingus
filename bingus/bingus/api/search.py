@@ -61,8 +61,16 @@ async def search(
         raise HTTPException(429, "Muitas buscas. Espere um pouco.")
     q = q.strip()
     timer = Timer()
+    warnings: list[str] = []
     if not q:
-        return {"query": q, "offset": offset, "has_more": False, "results": [], "timings": {}}
+        return {
+            "query": q,
+            "offset": offset,
+            "has_more": False,
+            "results": [],
+            "timings": {},
+            "warnings": warnings,
+        }
     pool = db.pool()
     try:
         async with pool.acquire() as conn, conn.transaction():
@@ -71,10 +79,15 @@ async def search(
     except Exception as e:
         log.warning("bm25 failed: %s", e)
         lexical = []
+        warnings.append("Busca por palavras falhou no banco.")
     timer.lap("bm25")
     best_chunk: dict[int, tuple[int, int]] = {}
     vec = await embed_query(q)
     timer.lap("embed_query")
+    if not vec:
+        warnings.append("Embed worker fora do ar: busca só por palavras, sem semântica.")
+    if len(warnings) == 2:
+        raise HTTPException(503, "Busca indisponível: banco e embed worker fora do ar.")
     if vec:
         for r in await pool.fetch(VECTOR, vec, CANDIDATES):
             best_chunk.setdefault(r["page_id"], (r["start_ch"], r["end_ch"]))
@@ -88,6 +101,7 @@ async def search(
             "has_more": False,
             "results": [],
             "timings": timer.done(),
+            "warnings": warnings,
         }
     meta = {r["id"]: r for r in await pool.fetch(META, candidates)}
     by_rank = sorted(candidates, key=lambda i: -meta[i]["rank"])  # PageRank como terceira lista
@@ -141,6 +155,7 @@ async def search(
         "has_more": offset + limit < len(ordered),
         "results": results,
         "timings": timer.done(),
+        "warnings": warnings,
     }
 
 
