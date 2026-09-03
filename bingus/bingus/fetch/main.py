@@ -19,6 +19,7 @@ log = logging.getLogger("bingus.fetch")
 UA = os.environ.get("BINGUS_USER_AGENT", "Bingus/1.0 (+https://github.com/ShiftSad/Bingus)")
 HOSTS = int(os.environ.get("BINGUS_HOSTS", "20"))
 PER_HOST = int(os.environ.get("BINGUS_PER_HOST", "10"))
+FLUSH = 5  # segundos entre envios de resultados: um POST por worker, não um por host
 TIMEOUT = 15
 MAX_BYTES = 5 * 1024 * 1024
 MAX_SITEMAPS = 5
@@ -38,10 +39,11 @@ class Worker:
         )
         self.tasks: set[asyncio.Task[None]] = set()  # um por host em voo
         self.freed = asyncio.Event()
+        self.done: list[dict[str, Any]] = []  # hosts prontos, esperando o próximo envio
 
     async def run(self) -> None:
-        """Mantém HOSTS hosts em voo. Cada um devolve o resultado ao terminar e libera o slot,
-        em vez de um lote inteiro esperar o host mais lento."""
+        """Mantém HOSTS hosts em voo. Cada um libera o slot ao terminar, em vez de um lote
+        inteiro esperar o host mais lento. Resultados vão juntos, a cada FLUSH segundos."""
         while True:
             free = HOSTS - len(self.tasks)
             if free < max(1, HOSTS // 4):  # pede em lotes, não um host por vez
@@ -67,16 +69,28 @@ class Worker:
 
     async def crawl(self, h: dict[str, Any]) -> None:
         try:
-            r = await self.crawl_host(h)
-            hosts = {r["host"]: r["info"]} if r["info"] else {}
-            await self.api.post_json(
-                "/fetch/results", {"pages": r["pages"], "hosts": hosts, "urls": r["urls"]}
-            )
-            log.info("%s: %d pages, %d sitemap urls", r["host"], len(r["pages"]), len(r["urls"]))
+            self.done.append(await self.crawl_host(h))
         except Exception as e:
             log.warning("%s failed: %s", h["host"], e)
         finally:
             self.freed.set()
+
+    async def flush(self) -> None:
+        while True:
+            await asyncio.sleep(FLUSH)
+            results, self.done = self.done, []
+            if not results:
+                continue
+            pages = [p for r in results for p in r["pages"]]
+            hosts = {r["host"]: r["info"] for r in results if r["info"]}
+            urls = [u for r in results for u in r["urls"]]
+            try:
+                await self.api.post_json(
+                    "/fetch/results", {"pages": pages, "hosts": hosts, "urls": urls}
+                )
+                log.info("%d hosts, %d pages, %d sitemap urls", len(results), len(pages), len(urls))
+            except Exception as e:
+                log.warning("results failed: %s", e)
 
     async def crawl_host(self, h: dict[str, Any]) -> dict[str, Any]:
         host, delay, robots = h["host"], h["crawl_delay"], h["robots"]
@@ -205,6 +219,7 @@ def main() -> None:
     stats = Stats()
 
     async def run() -> None:
-        await asyncio.gather(Worker(api, stats).run(), stats.run(api))
+        worker = Worker(api, stats)
+        await asyncio.gather(worker.run(), worker.flush(), stats.run(api))
 
     asyncio.run(run())
