@@ -13,13 +13,14 @@ BM25 e busca vetorial.
 
 - Código simples, poucos comentários, fácil de ler. Comentário só onde o porquê não é óbvio.
 - O projeto se mantém pequeno. Nada de abstração para o futuro, nada de camada extra.
-- Não faça commits. O usuário commita.
+- Commits em português, curtos, sem trailer de coautoria. Push quando o servidor precisa puxar.
 - Siga devagar. Uma peça por vez, mostre, espere o ok.
 - O backend NestJS foi apagado. O frontend Vite está congelado, exceto `src/search.ts`.
 - Sem testes por enquanto. Ruff para lint e formatação.
 - Idioma do código: inglês. Idioma das conversas e da documentação: português.
 - Tudo Python com uv. FastAPI, asyncpg, SQL escrito à mão. Sem ORM. Sem migrations: um `schema.sql` só.
-- Ao mudar o schema, o volume do Postgres é recriado. O banco ainda é descartável.
+- O banco de produção vive no dedicado e não é mais descartável. Mudança de schema é feita à mão
+  lá, com `ALTER` e `CREATE INDEX CONCURRENTLY`, e espelhada no `schema.sql`.
 
 ## Arquitetura
 
@@ -30,7 +31,7 @@ postgres  <->  api  <-- HTTP + API key -->  fetch workers (VPSs)
                                         -->  embed workers (GPU)
 ```
 
-- `api`: FastAPI. Scheduler, ingestão dos resultados, métricas Prometheus, seeds.
+- `api`: FastAPI. Scheduler, ingestão dos resultados, busca, métricas no Postgres, seeds.
 - `fetch`: baixa páginas, extrai texto com trafilatura, acha links, devolve tudo à API.
 - `embed`: gera embeddings dos chunks na GPU e devolve à API.
 - `common`: URL, hashes, simhash, chunking, cliente HTTP. Tudo que dois entrypoints usam.
