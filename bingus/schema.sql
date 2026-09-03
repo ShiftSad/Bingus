@@ -61,6 +61,7 @@ ALTER TABLE pages ALTER COLUMN text SET COMPRESSION lz4;
 CREATE INDEX pages_host_due ON pages (host, next_check_at) WHERE fail_count < 10;
 CREATE INDEX pages_content ON pages (content_hash) WHERE content_hash IS NOT NULL;
 CREATE INDEX pages_bm25 ON pages USING bm25 (bm25 bm25_ops);
+CREATE INDEX pages_rank ON pages (rank DESC);  -- embed worker pega as melhores páginas antes
 
 -- Fatias de pages.text. Embedding nulo = fila do embed worker.
 CREATE TABLE chunks (

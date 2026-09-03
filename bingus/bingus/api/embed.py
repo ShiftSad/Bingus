@@ -11,12 +11,18 @@ router = APIRouter(prefix="/embed")
 
 LEASE = dt.timedelta(minutes=15)
 
+# Páginas de maior PageRank primeiro: a busca vetorial só enxerga o que já tem vetor.
 LEASE_CHUNKS = """
-WITH picked AS (
-    SELECT page_id, seq FROM chunks
-    WHERE embedding IS NULL AND (leased_until IS NULL OR leased_until < now())
-    LIMIT $1
-    FOR UPDATE SKIP LOCKED
+WITH due AS (
+    SELECT p.id, p.rank FROM pages p
+    WHERE EXISTS (SELECT 1 FROM chunks c WHERE c.page_id = p.id AND c.embedding IS NULL
+                  AND (c.leased_until IS NULL OR c.leased_until < now()))
+    ORDER BY p.rank DESC LIMIT $1
+), picked AS (
+    SELECT c.page_id, c.seq FROM chunks c JOIN due d ON d.id = c.page_id
+    WHERE c.embedding IS NULL AND (c.leased_until IS NULL OR c.leased_until < now())
+    ORDER BY d.rank DESC LIMIT $1
+    FOR UPDATE OF c SKIP LOCKED
 )
 UPDATE chunks c SET leased_until = now() + $2
 FROM picked JOIN pages p ON p.id = picked.page_id
