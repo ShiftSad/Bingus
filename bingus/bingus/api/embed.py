@@ -31,7 +31,8 @@ RETURNING c.page_id, c.seq, substr(p.text, c.start_ch + 1, c.end_ch - c.start_ch
 """
 
 SAVE_EMBEDDING = """
-UPDATE chunks SET embedding = quantize_to_rabitq8($3::vector), leased_until = NULL
+UPDATE chunks
+SET embedding = quantize_to_rabitq8($3::vector), embedded_at = now(), leased_until = NULL
 WHERE page_id = $1 AND seq = $2
 """
 

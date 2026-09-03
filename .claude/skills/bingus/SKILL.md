@@ -273,7 +273,10 @@ Rankings como hosts com mais páginas ou páginas com maior rank são consultas 
 tabelas principais. Capriche no dashboard: taxa por worker, taxa de sucesso, bytes por segundo.
 
 O dashboard está em `grafana/bingus.json`, para importar no Grafana com a datasource Postgres
-escolhida na variável `DS`. Buckets de 1 minuto; as taxas por segundo dividem a soma por 60.
+escolhida na variável `DS`. Buckets acompanham o zoom com mínimo de 5 minutos; taxas dividem a
+soma pelo `$__interval_ms`. Dois índices existem só para ele: `chunks_embedded_at`, com
+`chunks.embedded_at` gravado ao salvar o vetor, e `pages_foreign`, parcial sobre as páginas
+rejeitadas por idioma, que ficam com `lang` e sem `content_hash`.
 Ao mexer, valide cada query no psql trocando `$__timeGroupAlias` por `date_trunc` e
 `$__timeFilter` por um filtro de data.
 

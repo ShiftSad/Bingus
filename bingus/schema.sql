@@ -62,6 +62,9 @@ CREATE INDEX pages_host_due ON pages (host, next_check_at) WHERE fail_count < 10
 CREATE INDEX pages_content ON pages (content_hash) WHERE content_hash IS NOT NULL;
 CREATE INDEX pages_bm25 ON pages USING bm25 (bm25 bm25_ops);
 CREATE INDEX pages_rank ON pages (rank DESC);  -- embed worker pega as melhores páginas antes
+-- Páginas rejeitadas por idioma: só lang e data, sem conteúdo. Para o dashboard.
+CREATE INDEX pages_foreign ON pages (fetched_at DESC) INCLUDE (lang)
+WHERE content_hash IS NULL AND lang IS NOT NULL;
 
 -- Fatias de pages.text. Embedding nulo = fila do embed worker.
 CREATE TABLE chunks (
@@ -71,10 +74,12 @@ CREATE TABLE chunks (
     end_ch       integer NOT NULL,
     simhash      bigint NOT NULL,             -- do texto embedado, só muda ao reembedar
     embedding    rabitq8(512),
+    embedded_at  timestamptz,
     leased_until timestamptz,
     PRIMARY KEY (page_id, seq)
 );
 CREATE INDEX chunks_pending ON chunks (page_id) WHERE embedding IS NULL;
+CREATE INDEX chunks_embedded_at ON chunks (embedded_at DESC) WHERE embedded_at IS NOT NULL;
 CREATE INDEX chunks_embedding ON chunks USING vchordrq (embedding rabitq8_cosine_ops)
 WITH (options = $$
 [build.internal]
