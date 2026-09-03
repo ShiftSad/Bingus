@@ -132,6 +132,13 @@ UPDATE hosts h SET leased_until = NULL, next_due = greatest({COOLDOWN}, coalesce
 WHERE h.host = $1
 """
 
+# Hosts .br aceitam inglês também: site brasileiro publicando em inglês é conteúdo nosso.
+INSERT_HOSTS = """
+INSERT INTO hosts (host, langs)
+SELECT h, CASE WHEN h LIKE '%.br' THEN '{pt,en}' ELSE '{pt}' END::text[]
+FROM unnest($1::text[]) AS t(h) ON CONFLICT DO NOTHING
+"""
+
 ENSURE_PAGE = """
 INSERT INTO pages (url_hash, url, host, depth) VALUES ($1, $2, $3, $4)
 ON CONFLICT (url_hash) DO NOTHING RETURNING id
@@ -252,7 +259,7 @@ async def ingest(conn: Conn, page: PageResult, links: Links) -> tuple[str, int]:
     """Store one fetch result. Returns the outcome and how many chunks were queued."""
     h, host = url_hash(page.url), host_of(page.url)
     await conn.execute("DELETE FROM frontier WHERE url_hash = $1", h)
-    await conn.execute("INSERT INTO hosts (host) VALUES ($1) ON CONFLICT DO NOTHING", host)
+    await conn.execute(INSERT_HOSTS, [host])
     if await conn.fetchval(ENSURE_PAGE, h, page.url, host, page.depth):
         await conn.execute("UPDATE hosts SET page_count = page_count + 1 WHERE host = $1", host)
     row = await conn.fetchrow(
@@ -363,9 +370,5 @@ async def add_frontier(conn: Conn, links: Links) -> int:
         return 0
     hashes = list(links)
     urls, hosts, depths = (list(col) for col in zip(*links.values(), strict=True))
-    await conn.execute(
-        "INSERT INTO hosts (host) SELECT DISTINCT h FROM unnest($1::text[]) AS t(h)"
-        + " ON CONFLICT DO NOTHING",
-        hosts,
-    )
+    await conn.execute(INSERT_HOSTS, hosts)
     return await conn.fetchval(ADD_FRONTIER, hashes, urls, hosts, depths) or 0

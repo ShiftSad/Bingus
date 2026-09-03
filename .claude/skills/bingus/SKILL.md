@@ -116,7 +116,9 @@ Regras:
   sempre andam. Frontier é servida do mais novo para o mais antigo.
 - Sitemaps são relidos a cada 24 horas em todo host com conteúdo em português.
 - O foco no Brasil é redução de escopo, não regra absoluta. Cada host tem `langs`, idiomas
-  aceitos, padrão `{pt}`. Fontes de notícia e artigos sobre IA, que a IA do usuário vai buscar
+  aceitos. Hosts `.br` nascem com `{pt,en}`, porque site brasileiro publicando em inglês é
+  conteúdo nosso; os demais com `{pt}`, senão os links levam o crawler para a Wikipédia em
+  inglês e o escopo some. Fontes de notícia e artigos sobre IA, que a IA do usuário vai buscar
   muito, entram com `{pt,en}` via `POST /fetch/seed` com `langs`. Regras baratas: hosts `.br`
   novos passam na frente dos outros novos; host com três páginas fora dos idiomas dele e nenhuma
   dentro é bloqueado e sua frontier apagada; sitemaps só são lidos a partir da primeira página

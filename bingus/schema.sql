@@ -10,7 +10,7 @@ CREATE TABLE hosts (
     robots       text,                        -- robots.txt bruto, null = nunca buscado
     robots_at    timestamptz,
     crawl_delay  real NOT NULL DEFAULT 1.0,   -- segundos entre requests neste host
-    langs        text[] NOT NULL DEFAULT '{pt}', -- idiomas aceitos; fontes de IA levam {pt,en}
+    langs        text[] NOT NULL DEFAULT '{pt}', -- idiomas aceitos; .br e fontes de IA levam {pt,en}
     max_pages    integer NOT NULL DEFAULT 1000000, -- válvula contra sites infinitos, só para baixo
     page_count   integer NOT NULL DEFAULT 0,   -- páginas conhecidas, inclusive falhas
     pt_count     integer NOT NULL DEFAULT 0,   -- páginas com conteúdo em português
