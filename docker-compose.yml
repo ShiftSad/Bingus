@@ -22,8 +22,6 @@ services:
       - work_mem=64MB
       - -c
       - max_wal_size=4GB
-    ports:
-      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
       - ./bingus/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
@@ -71,8 +69,8 @@ services:
       BINGUS_API_KEY: ${BINGUS_EMBED_KEY}
       BINGUS_EMBED_BATCH: 8
       BINGUS_EMBED_LEASE: 256
-    ports:
-      - "8100:8100"
+    expose:
+      - "8100"
     volumes:
       - hf_cache:/root/.cache/huggingface
     deploy:

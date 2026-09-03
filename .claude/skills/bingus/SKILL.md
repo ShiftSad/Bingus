@@ -283,14 +283,19 @@ Migrar o banco do PC para o dedicado, nesta ordem:
 2. `docker compose exec -T postgres pg_dump -U bingus -Fc bingus > bingus.dump`. Custom format,
    comprimido, uns 40% do tamanho do banco. Os índices são recriados no restore.
 3. Copiar o dump para o dedicado. No dedicado, `docker compose up -d postgres` cria o banco vazio
-   com o `schema.sql`; depois `pg_restore -U bingus -d bingus --clean --if-exists bingus.dump`
-   dentro do container. As extensões já existem, os avisos sobre elas são normais.
+   com o `schema.sql`; depois
+   `docker compose exec -T postgres pg_restore -U bingus -d bingus --clean --if-exists --no-owner -j 4 < bingus.dump`.
+   As extensões já existem, os avisos sobre elas são normais.
 4. `docker compose up -d api frontend` e, se a GPU estiver configurada,
    `docker compose --profile workers up -d`.
 5. No PC, workers apontando para a API do dedicado pela WireGuard ou pelo Caddy.
 6. Cron diário: `docker compose exec api bingus-rank` e
    `docker compose exec postgres psql -U bingus -c "REINDEX INDEX CONCURRENTLY pages_bm25"`.
    Um `VACUUM ANALYZE pages` de vez em quando também.
+
+O Postgres não publica porta no host: só a API, na rede do compose, fala com ele. Administração
+por `docker compose exec postgres psql -U bingus`. Se precisar de um cliente gráfico, publique
+`127.0.0.1:5433:5432` e feche depois. O embed também só expõe 8100 dentro da rede.
 
 Grafana: usuário só de leitura, `CREATE ROLE grafana LOGIN PASSWORD '...'; GRANT SELECT ON ALL
 TABLES IN SCHEMA public TO grafana;`, datasource Postgres.
