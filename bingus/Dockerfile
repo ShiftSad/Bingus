@@ -11,4 +11,7 @@ RUN uv sync --frozen --no-dev --no-install-project --extra $EXTRA
 COPY bingus ./bingus
 RUN uv sync --frozen --no-dev --extra $EXTRA
 
+# torch 2.14 manda até matmul para kernels Triton em eager, que exigem gcc e não rodam em Pascal.
+ENV TORCH_DISABLE_NATIVE_JIT=1
+
 CMD ["bingus-api"]
