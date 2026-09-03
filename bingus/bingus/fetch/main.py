@@ -10,7 +10,7 @@ from urllib.robotparser import RobotFileParser
 import httpx
 
 from bingus.common.client import Api
-from bingus.common.stats import Stats
+from bingus.common.stats import INSTANCE, Stats
 from bingus.common.urls import normalize
 from bingus.fetch.page import extract
 
@@ -62,6 +62,7 @@ class Worker:
                 log.info("no work, waiting")
                 await asyncio.sleep(30)
                 continue
+            log.info("%d hosts leased, %d in flight", len(batch["hosts"]), len(self.tasks))
             for h in batch["hosts"]:
                 task = asyncio.create_task(self.crawl(h))
                 self.tasks.add(task)
@@ -219,6 +220,7 @@ def main() -> None:
     stats = Stats()
 
     async def run() -> None:
+        log.info("%s: %d hosts in flight, results every %ds", INSTANCE, HOSTS, FLUSH)
         worker = Worker(api, stats)
         await asyncio.gather(worker.run(), worker.flush(), stats.run(api))
 
