@@ -272,6 +272,8 @@ Sem Prometheus. Tudo vai para o Postgres e o Grafana lê com a datasource Postgr
 usuário só de leitura. Três tabelas, todas com retenção de 90 dias, limpas pela própria API:
 
 - `worker_samples`: o worker faz push a cada ~10 s em `POST /metrics` com a mesma chave.
+  Vai junto `instance`, o hostname ou `BINGUS_NAME`, e a API grava `worker` como `fetch/nome`:
+  várias máquinas com a mesma chave viram séries separadas.
   Cada amostra traz requests, bytes baixados, páginas prontas, erros por tipo e CPU do processo
   no período. Workers não abrem porta nenhuma.
 - `batches`: a API grava uma linha por resultado ingerido, com contagem por desfecho, URLs

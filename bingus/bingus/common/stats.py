@@ -1,6 +1,8 @@
 import asyncio
 import datetime as dt
 import logging
+import os
+import socket
 import time
 from collections import Counter
 from typing import Any
@@ -8,6 +10,9 @@ from typing import Any
 from bingus.common.client import Api
 
 log = logging.getLogger(__name__)
+
+# Várias máquinas usam a mesma chave; o nome separa as séries no dashboard.
+INSTANCE = os.environ.get("BINGUS_NAME", socket.gethostname())
 
 
 class Stats:
@@ -42,7 +47,7 @@ class Stats:
             self.errors.clear()
             cpu = now
             try:
-                await api.post_json("/metrics", {"samples": self.pending})
+                await api.post_json("/metrics", {"instance": INSTANCE, "samples": self.pending})
                 self.pending.clear()
             except Exception as e:
                 log.warning("metrics push failed: %s", e)

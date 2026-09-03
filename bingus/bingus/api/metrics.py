@@ -25,6 +25,7 @@ class Sample(BaseModel):
 
 
 class Samples(BaseModel):
+    instance: str = ""  # máquina; várias podem usar a mesma chave
     samples: list[Sample]
 
 
@@ -58,6 +59,8 @@ PRUNE = [
 
 @router.post("/metrics")
 async def ingest(body: Samples, name: str = Depends(worker)):
+    if body.instance:
+        name = f"{name}/{body.instance}"
     rows = [
         (name, s.at, s.requests, s.bytes, s.pages, json.dumps(s.errors), s.cpu)
         for s in body.samples
