@@ -391,18 +391,24 @@
             "uid": "${DS}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), worker AS metric, sum(pages) / 60.0 AS value\nFROM worker_samples WHERE $__timeFilter(at) GROUP BY 1, 2 ORDER BY 1",
+          "rawSql": "SELECT $__timeGroupAlias(at, $__interval, 0), worker AS metric, sum(pages) / ($__interval_ms / 1000.0) AS value\nFROM worker_samples WHERE $__timeFilter(at) GROUP BY 1, 2 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "short",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
         },
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "interval": "5m"
     },
     {
       "id": 12,
@@ -425,18 +431,24 @@
             "uid": "${DS}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), worker AS metric, sum(bytes) / 60.0 AS value\nFROM worker_samples WHERE $__timeFilter(at) GROUP BY 1, 2 ORDER BY 1",
+          "rawSql": "SELECT $__timeGroupAlias(at, $__interval, 0), worker AS metric, sum(bytes) / ($__interval_ms / 1000.0) AS value\nFROM worker_samples WHERE $__timeFilter(at) GROUP BY 1, 2 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "Bps"
+          "unit": "Bps",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
         },
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "interval": "5m"
     },
     {
       "id": 13,
@@ -459,18 +471,24 @@
             "uid": "${DS}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), worker AS metric, sum(requests) / 60.0 AS value\nFROM worker_samples WHERE $__timeFilter(at) GROUP BY 1, 2 ORDER BY 1",
+          "rawSql": "SELECT $__timeGroupAlias(at, $__interval, 0), worker AS metric, sum(requests) / ($__interval_ms / 1000.0) AS value\nFROM worker_samples WHERE $__timeFilter(at) GROUP BY 1, 2 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps"
+          "unit": "reqps",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
         },
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "interval": "5m"
     },
     {
       "id": 14,
@@ -493,18 +511,24 @@
             "uid": "${DS}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), worker AS metric, avg(cpu) AS value\nFROM worker_samples WHERE $__timeFilter(at) GROUP BY 1, 2 ORDER BY 1",
+          "rawSql": "SELECT $__timeGroupAlias(at, $__interval, 0), worker AS metric, avg(cpu) AS value\nFROM worker_samples WHERE $__timeFilter(at) GROUP BY 1, 2 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "short",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
         },
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "interval": "5m"
     },
     {
       "id": 15,
@@ -527,23 +551,29 @@
             "uid": "${DS}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroupAlias(s.at, '1m'), e.key AS metric, sum(e.value::int) AS value\nFROM worker_samples s, jsonb_each_text(s.errors) e\nWHERE $__timeFilter(s.at) GROUP BY 1, 2 ORDER BY 1",
+          "rawSql": "SELECT $__timeGroupAlias(s.at, $__interval, 0), e.key AS metric, sum(e.value::int) * 60000.0 / $__interval_ms AS value\nFROM worker_samples s, jsonb_each_text(s.errors) e\nWHERE $__timeFilter(s.at) GROUP BY 1, 2 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "short",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
         },
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "interval": "5m"
     },
     {
       "id": 16,
       "type": "timeseries",
-      "title": "Chunks embedados por minuto",
+      "title": "Chunks embedados por segundo",
       "datasource": {
         "type": "grafana-postgres-datasource",
         "uid": "${DS}"
@@ -561,18 +591,24 @@
             "uid": "${DS}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), worker AS metric, sum(chunks_embedded) AS value\nFROM batches WHERE $__timeFilter(at) AND chunks_embedded > 0 GROUP BY 1, 2 ORDER BY 1",
+          "rawSql": "SELECT $__timeGroupAlias(at, $__interval, 0), worker AS metric, sum(chunks_embedded) / ($__interval_ms / 1000.0) AS value\nFROM batches WHERE $__timeFilter(at) AND chunks_embedded > 0 GROUP BY 1, 2 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "short",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
         },
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "interval": "5m"
     },
     {
       "id": 17,
@@ -590,7 +626,7 @@
     {
       "id": 18,
       "type": "timeseries",
-      "title": "Desfecho das páginas por minuto",
+      "title": "Desfecho das páginas por segundo",
       "datasource": {
         "type": "grafana-postgres-datasource",
         "uid": "${DS}"
@@ -608,7 +644,7 @@
             "uid": "${DS}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroupAlias(at, '1m'),\n       sum(pages_new) AS \"novas\", sum(pages_changed) AS \"mudaram\",\n       sum(pages_unchanged) AS \"iguais\", sum(pages_failed) AS \"falharam\",\n       sum(pages_foreign) AS \"outro idioma\"\nFROM batches WHERE $__timeFilter(at) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT $__timeGroupAlias(at, $__interval, 0),\n       sum(pages_new) / ($__interval_ms / 1000.0) AS \"novas\", sum(pages_changed) / ($__interval_ms / 1000.0) AS \"mudaram\",\n       sum(pages_unchanged) / ($__interval_ms / 1000.0) AS \"iguais\", sum(pages_failed) / ($__interval_ms / 1000.0) AS \"falharam\",\n       sum(pages_foreign) / ($__interval_ms / 1000.0) AS \"outro idioma\"\nFROM batches WHERE $__timeFilter(at) GROUP BY 1 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -620,12 +656,15 @@
             "stacking": {
               "mode": "normal"
             },
-            "fillOpacity": 40
+            "fillOpacity": 40,
+            "lineInterpolation": "smooth",
+            "lineWidth": 1
           }
         },
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "interval": "5m"
     },
     {
       "id": 19,
@@ -648,18 +687,25 @@
             "uid": "${DS}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroupAlias(at, '1m'),\n       100.0 * sum(pages_new + pages_changed + pages_unchanged)\n       / nullif(sum(pages_new + pages_changed + pages_unchanged + pages_failed + pages_foreign), 0) AS \"sucesso\"\nFROM batches WHERE $__timeFilter(at) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT $__timeGroupAlias(at, $__interval, NULL),\n       100.0 * sum(pages_new + pages_changed + pages_unchanged)\n       / nullif(sum(pages_new + pages_changed + pages_unchanged + pages_failed + pages_foreign), 0) AS \"sucesso\"\nFROM batches WHERE $__timeFilter(at) GROUP BY 1 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent"
+          "unit": "percent",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "spanNulls": false
+          }
         },
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "interval": "5m"
     },
     {
       "id": 20,
@@ -682,23 +728,30 @@
             "uid": "${DS}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), avg(ms) AS \"média\", max(ms) AS \"máximo\"\nFROM batches WHERE $__timeFilter(at) AND chunks_embedded = 0 GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT $__timeGroupAlias(at, $__interval, NULL), avg(ms) AS \"média\", max(ms) AS \"máximo\"\nFROM batches WHERE $__timeFilter(at) AND chunks_embedded = 0 GROUP BY 1 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms"
+          "unit": "ms",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "spanNulls": false
+          }
         },
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "interval": "5m"
     },
     {
       "id": 21,
       "type": "timeseries",
-      "title": "Frontier e chunks enfileirados por minuto",
+      "title": "Frontier e chunks enfileirados por segundo",
       "datasource": {
         "type": "grafana-postgres-datasource",
         "uid": "${DS}"
@@ -716,18 +769,24 @@
             "uid": "${DS}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroupAlias(at, '1m'), sum(frontier_added) AS \"urls novas\", sum(chunks_queued) AS \"chunks\"\nFROM batches WHERE $__timeFilter(at) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT $__timeGroupAlias(at, $__interval, 0), sum(frontier_added) / ($__interval_ms / 1000.0) AS \"urls novas\", sum(chunks_queued) / ($__interval_ms / 1000.0) AS \"chunks\"\nFROM batches WHERE $__timeFilter(at) GROUP BY 1 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "short",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
         },
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "interval": "5m"
     },
     {
       "id": 22,
