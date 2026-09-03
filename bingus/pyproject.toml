@@ -1,0 +1,69 @@
+[project]
+name = "bingus"
+version = "0.1.0"
+description = "Crawler e indexador da internet brasileira"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx",
+    "xxhash",
+    "msgpack",
+]
+
+[project.optional-dependencies]
+api = [
+    "fastapi",
+    "uvicorn[standard]",
+    "asyncpg",
+    "numpy",
+    "scipy",
+    "trafilatura",
+    "py3langid",
+]
+fetch = [
+    "trafilatura",
+    "py3langid",
+]
+embed = [
+    "torch",
+    "sentence-transformers",
+    "numpy",
+    "fastapi",
+    "uvicorn[standard]",
+]
+
+# Torch com CUDA 12.6: o último que ainda roda na 1050 Ti (Pascal) e também na 3060 Ti.
+[tool.uv.sources]
+torch = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[dependency-groups]
+dev = ["ruff", "basedpyright"]
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+pythonVersion = "3.12"
+
+[project.scripts]
+bingus-api = "bingus.api.main:main"
+bingus-fetch = "bingus.fetch.main:main"
+bingus-embed = "bingus.embed.main:main"
+bingus-rank = "bingus.api.rank:main"
+bingus-seed = "bingus.api.seed:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bingus"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

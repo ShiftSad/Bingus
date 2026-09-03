@@ -1,50 +1,89 @@
 services:
   postgres:
-    image: ankane/pgvector
-    container_name: postgres_vector
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: banana
-      POSTGRES_DB: vectordb
+    image: tensorchord/vchord-suite:pg18-latest
+    env_file: .env
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=vchord.so,pg_tokenizer.so,vchord_bm25.so
+      - -c
+      - search_path="$$user",public,bm25_catalog
+      - -c
+      - default_toast_compression=lz4
+      - -c
+      - wal_compression=lz4
+      - -c
+      - shared_buffers=2GB
+      - -c
+      - effective_cache_size=8GB
+      - -c
+      - maintenance_work_mem=1GB
+      - -c
+      - work_mem=64MB
+      - -c
+      - max_wal_size=4GB
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
+      - ./bingus/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: nestjs_backend
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USERNAME=user
-      - DB_PASSWORD=banana
-      - DB_NAME=postgres
-      - PORT=3000
+  api:
+    image: shiftsad/bingus:api
+    env_file: .env
+    command: bingus-api
     ports:
-      - "3000:3000"
+      - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
-    command: npm run start:prod
 
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
-    container_name: vite_frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://api.shiftsad.dev}
     expose:
       - "80"
-    depends_on:
-      - backend
-    command: npx serve -s dist
+
+  # Workers na mesma máquina: docker compose --profile workers up -d
+  fetch:
+    image: shiftsad/bingus:fetch
+    profiles: ["workers"]
+    command: bingus-fetch
+    environment:
+      BINGUS_API_URL: http://api:8000
+      BINGUS_API_KEY: ${BINGUS_FETCH_KEY}
+      BINGUS_HOSTS: 20
+    depends_on: [api]
+
+  embed:
+    image: shiftsad/bingus:embed
+    profiles: ["workers"]
+    command: bingus-embed
+    environment:
+      BINGUS_API_URL: http://api:8000
+      BINGUS_API_KEY: ${BINGUS_EMBED_KEY}
+      BINGUS_EMBED_BATCH: 8
+      BINGUS_EMBED_LEASE: 256
+    ports:
+      - "8100:8100"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    depends_on: [api]
 
 volumes:
-  postgres_data:
+  pgdata:
+  hf_cache:

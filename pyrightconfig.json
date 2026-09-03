@@ -1,0 +1,7 @@
+{
+  "typeCheckingMode": "standard",
+  "pythonVersion": "3.12",
+  "venvPath": "bingus",
+  "venv": ".venv",
+  "include": ["bingus/bingus"]
+}

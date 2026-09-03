@@ -1,43 +1,36 @@
 # Bingus
 
-Uma engine de pesquisa feita do zero com postgres
+Buscador da internet brasileira em português, feito para virar um MCP de busca para agentes.
 
-## Experimente Live agora!
-[bingus.shiftsad.dev](https://bingus.shiftsad.dev)
+## Como funciona
 
-![Página Inicial](https://3s6cswpu71.ufs.sh/f/37o8Wzy4EnVtf0NIRLOxvZ68kj9G4zuJHTlRAXUwdKtWSrmI)
-![Página de Pesquisa](https://3s6cswpu71.ufs.sh/f/37o8Wzy4EnVtNR1VCDoC4Ojw7UL9IqcK2euMb0PsyzASERYo)
+- **Postgres** com [VectorChord](https://github.com/tensorchord/VectorChord): BM25 de verdade com
+  stemmer em português e busca vetorial com IVF e RaBitQ, num banco só.
+- **API** em Python, FastAPI: scheduler do crawler, ingestão, busca híbrida, sumários e telemetria.
+- **Fetch workers**: baixam páginas, extraem texto, respeitam robots.txt e devolvem tudo à API.
+  Rodam em qualquer máquina com uma chave de API, sem acesso ao banco.
+- **Embed worker**: gera embeddings com `perplexity-ai/pplx-embed-v1-0.6b` numa GPU e serve
+  embeddings de query para a busca.
+- **Frontend**: Vite puro, chama a API direto.
 
-## Como funciona?
-O sistema realizou o *scrapping* de 800 mil páginas do Google e coletou 61 milhões de links de *backreference* para o ranqueamento das páginas.
+A busca funde BM25, similaridade vetorial e PageRank por Reciprocal Rank Fusion. Páginas são
+revisitadas com intervalo adaptativo, e só ganham embedding novo quando o texto muda de verdade.
 
-![Schema do Banco de Dados](https://3s6cswpu71.ufs.sh/f/37o8Wzy4EnVtwJVy6oGmOVTZvJlioGEInyzmUDH19L5c0NX3)
+## Rodando
 
-Um script SQL é utilizado para iterar 20 vezes por todos os links, aumentando a pontuação dos links mais frequentemente referenciados. Essas 20 iterações são realizadas porque, se um link é chamado a partir de uma fonte de maior qualidade (com melhor ranqueamento), ele recebe pontos extras. Embora 20 passes possam parecer um exagero para garantir maior precisão, é uma medida que achei interessante para o projeto.
+```
+cp .env.example .env
+docker compose up -d                       # postgres, api, frontend
+docker compose --profile workers up -d     # fetch e embed na mesma máquina, embed com GPU
+```
 
-Na coluna de todas as páginas, durante o crawling, todo o conteúdo da página foi capturado e salvo em uma tabela. Em seguida, foi feito o *embedding* desse conteúdo usando o modelo `all-mpnet-base-v2` para possibilitar uma pesquisa mais inteligente. Assim, para cada *prompt* de pesquisa, o *backend* invoca o mesmo modelo via `@xenova/transformers` e realiza a busca utilizando o `pgvector`.
+Workers, em qualquer lugar:
 
-## Techstack
+```
+docker build --build-arg EXTRA=fetch -t bingus-fetch bingus/
+docker run -d -e BINGUS_API_URL=https://... -e BINGUS_API_KEY=... bingus-fetch bingus-fetch
+```
 
-*   **Backend:** TypeScript (NestJS)
-*   **Frontend:** Vite, TypeScript
-*   **Banco de Dados:** PostgreSQL (PL/pgSQL)
-*   **Containerização:** Docker
-*   **Scrapper:** Python
+PageRank, uma vez por dia: `docker compose exec api bingus-rank`.
 
-## Por essa escolha?
-
-### NestJS
-NestJs realmente chamou minha atenção por ser algo extra do que eu estou acostumado, lidando com servidores TCP diretamente. Decidi experimentar com uma experiência mais opnionada, e desbravar o outro lado da força.
-
-### Vite
-Com o Nest, já estava muito fora da minha zona de conforto, tive que voltar pelo menos um pouco.
-
-### Crawler
-Minha primeira vez fazendo algo do tipo, mas sabia que Python seria minha melhor alternativa. Iniciei seguindo uma matéria do Medium explicando o básico de Crawlers, e continuei dai. Tive que experimentar e me confortar com asyncio, que era uma coisa que nunca tinha usado fortemente antes.
-
-### Database
-Já tinha experiência com PgVector, logo, fui no fácil. Não via necessidade de buscar algo especializado, quando eu já ia precisar de qualquer forma usar um banco de dados convencional. Pode até ser menos eficiência, mas por ser um projeto, imagino que essa perda tenha sido obfuscada por um serviço a menos.
-
-## Contribuições
-Prefiro que não, esse foi um projeto de uma madrugada com objetivo de aprendizado, o código pode melhor muito ainda, e não foi feito com a mentalidade de ser mantido.
+Detalhes de arquitetura e decisões em `.claude/skills/bingus/SKILL.md`.

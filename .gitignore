@@ -1,7 +1,26 @@
-.venv
-src/__pycache__
-src/*.pyc
-src/*.pyo
-src/*.pyd
+# segredos e dados locais
+.env
+.env.*
+!.env.example
+data/
+*.dump
 
-*.pickle
+# python
+.venv
+__pycache__
+*.pyc
+.ruff_cache
+.pytest_cache
+
+# node
+node_modules
+dist
+.vite
+
+# editores e sistema
+.vscode/
+.idea/
+.claude/settings.local.json
+.DS_Store
+Thumbs.db
+*.log

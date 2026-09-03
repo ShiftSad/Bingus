@@ -1,6 +1,8 @@
+# Borda pública. No cenário com VPS na frente do dedicado, troque api:8000 e frontend:80
+# pelos endereços da WireGuard.
 api.shiftsad.dev {
     encode gzip
-    reverse_proxy backend:3000
+    reverse_proxy api:8000
 
     tls {
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
