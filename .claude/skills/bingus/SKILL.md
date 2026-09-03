@@ -300,9 +300,9 @@ Migrar o banco do PC para o dedicado, nesta ordem:
    `docker compose exec postgres psql -U bingus -c "REINDEX INDEX CONCURRENTLY pages_bm25"`.
    Um `VACUUM ANALYZE pages` de vez em quando também.
 
-O Postgres não publica porta no host: só a API, na rede do compose, fala com ele. Administração
-por `docker compose exec postgres psql -U bingus`. Se precisar de um cliente gráfico, publique
-`127.0.0.1:5433:5432` e feche depois. O embed também só expõe 8100 dentro da rede.
+O Postgres publica em `BINGUS_PG_BIND`, padrão `127.0.0.1:5432`; no dedicado é o IP da WireGuard
+numa porta livre, para o Grafana e o psql do PC. Nunca na interface pública. O embed só expõe
+8100 dentro da rede do compose.
 
 Grafana: usuário só de leitura, `CREATE ROLE grafana LOGIN PASSWORD '...'; GRANT SELECT ON ALL
 TABLES IN SCHEMA public TO grafana;`, datasource Postgres.
@@ -314,6 +314,11 @@ CommonCrawl, notícias, RSS, PDF, o MCP em si, reescrita da busca, sumários.
 ## Verificado no container
 
 - Postgres 18 guarda dados em `/var/lib/postgresql`, sem `/data`.
+- `BINGUS_EMBED_LEASE=0` deixa o embed worker só respondendo queries em `/embed`, sem puxar
+  lote. É o modo do dedicado: na 1050 Ti uma passada de lote leva 4 s e a query esperava atrás.
+- torch 2.14 em Linux roteia até `matmul` para kernels Triton (`torch._native`), que exigem gcc
+  na imagem e não rodam em Pascal. O Dockerfile fixa `TORCH_DISABLE_NATIVE_JIT=1`; no Windows
+  nativo não há Triton e o problema não aparece.
 - `shared_preload_libraries=vchord.so,pg_tokenizer.so,vchord_bm25.so` é obrigatório.
 - Funções do tokenizador vivem em `tokenizer_catalog` e precisam do schema qualificado no initdb.
 - O índice bm25 gasta uma página de 8 KB por termo do vocabulário. Modelo customizado, que

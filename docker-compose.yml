@@ -22,6 +22,8 @@ services:
       - work_mem=64MB
       - -c
       - max_wal_size=4GB
+    ports:
+      - "${BINGUS_PG_BIND:-127.0.0.1:5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql
       - ./bingus/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
@@ -67,8 +69,9 @@ services:
     environment:
       BINGUS_API_URL: http://api:8000
       BINGUS_API_KEY: ${BINGUS_EMBED_KEY}
-      BINGUS_EMBED_BATCH: 8
-      BINGUS_EMBED_LEASE: 256
+      BINGUS_EMBED_BATCH: ${BINGUS_EMBED_BATCH:-8}
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      BINGUS_EMBED_LEASE: ${BINGUS_EMBED_LEASE:-256}
     expose:
       - "8100"
     volumes:
