@@ -78,8 +78,9 @@ similaridade por cosseno, sem prefixo de instrução, contexto 32K.
 - Torch vem do índice CUDA 12.6 do PyTorch, o último que roda na 1050 Ti. Configurado no
   `pyproject.toml`. No Windows a instalação é a mesma, `uv sync --extra embed`.
 - Fluxo: `POST /embed/batch?size=64` aluga chunks por 15 minutos e devolve o texto de cada um.
-  A lease pega páginas em ordem de PageRank, pelo índice `pages_rank`: com backlog grande, a
-  busca vetorial passa a enxergar primeiro o que mais importa. 2 ms por lease, 200 ms no pior caso.
+  A lease pega primeiro páginas fora da Wikipédia e, dentro de cada grupo, segue o PageRank pelo
+  índice `pages_rank`. A Wikipédia só preenche o espaço restante quando não há outras páginas
+  pendentes. Com backlog grande, a busca vetorial enxerga primeiro o que mais importa.
   `POST /embed/results` recebe msgpack com bytes crus e grava com `quantize_to_rabitq8`.
 
 ## Banco

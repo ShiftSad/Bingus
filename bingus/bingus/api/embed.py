@@ -11,17 +11,28 @@ router = APIRouter(prefix="/embed")
 
 LEASE = dt.timedelta(minutes=15)
 
-# Páginas de maior PageRank primeiro: a busca vetorial só enxerga o que já tem vetor.
+# Páginas de maior PageRank primeiro, deixando a Wikipédia atrás dos demais hosts.
 LEASE_CHUNKS = """
-WITH due AS (
+WITH non_wikipedia AS MATERIALIZED (
     SELECT p.id, p.rank FROM pages p
-    WHERE EXISTS (SELECT 1 FROM chunks c WHERE c.page_id = p.id AND c.embedding IS NULL
+    WHERE p.host <> 'pt.wikipedia.org'
+      AND EXISTS (SELECT 1 FROM chunks c WHERE c.page_id = p.id AND c.embedding IS NULL
                   AND (c.leased_until IS NULL OR c.leased_until < now()))
     ORDER BY p.rank DESC LIMIT $1
+), wikipedia AS (
+    SELECT p.id, p.rank FROM pages p
+    WHERE p.host = 'pt.wikipedia.org'
+      AND EXISTS (SELECT 1 FROM chunks c WHERE c.page_id = p.id AND c.embedding IS NULL
+                  AND (c.leased_until IS NULL OR c.leased_until < now()))
+    ORDER BY p.rank DESC LIMIT greatest($1 - (SELECT count(*) FROM non_wikipedia), 0)
+), due AS (
+    SELECT id, rank, false AS is_wikipedia FROM non_wikipedia
+    UNION ALL
+    SELECT id, rank, true AS is_wikipedia FROM wikipedia
 ), picked AS (
     SELECT c.page_id, c.seq FROM chunks c JOIN due d ON d.id = c.page_id
     WHERE c.embedding IS NULL AND (c.leased_until IS NULL OR c.leased_until < now())
-    ORDER BY d.rank DESC LIMIT $1
+    ORDER BY d.is_wikipedia, d.rank DESC LIMIT $1
     FOR UPDATE OF c SKIP LOCKED
 )
 UPDATE chunks c SET leased_until = now() + $2
