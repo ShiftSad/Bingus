@@ -21,6 +21,7 @@ interface Page {
     results: Result[];
     timings: Record<string, number>;
     warnings: string[];
+    corrected: string | null;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -91,6 +92,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 results.innerHTML = page.warnings
                     .map((w) => `<div class="alert alert-warning">${w}</div>`)
                     .join('');
+                if (page.corrected) {
+                    const note = document.createElement('div');
+                    note.className = 'mb-2';
+                    note.append('Mostrando resultados para ');
+                    note.appendChild(document.createElement('b')).textContent = page.corrected;
+                    results.appendChild(note);
+                }
             }
             if (from === 0 && page.results.length === 0) {
                 noResults.classList.remove('d-none');

@@ -30,6 +30,8 @@ async def search(query: str, limit: int = 10) -> str:
     Devolve título, URL, data de publicação quando houver e um trecho de cada resultado."""
     res = await engine.run_search(query, max(1, min(limit, 20)), 0, summaries=False)
     lines = [f"Aviso: {w}" for w in res["warnings"]]
+    if res["corrected"]:
+        lines.append(f"Buscado como: {res['corrected']}")
     if not res["results"]:
         lines.append(f"Nada encontrado no índice do Bingus para: {query}")
     for i, r in enumerate(res["results"], 1):

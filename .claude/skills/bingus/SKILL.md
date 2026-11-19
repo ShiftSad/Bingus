@@ -274,6 +274,16 @@ frontend e o MCP chamam. Híbrida:
 - Resultados sem sumário ganham um na hora, em paralelo, com timeout de 20 s. Ver Sumários.
   `summaries=false` desliga a LLM: sumários já salvos ainda voltam, os que faltam ficam nulos.
   O frontend tem a chave "Gerar resumos", lembrada em localStorage.
+- Correção de acentos antes do BM25, à moda do "Mostrando resultados para": o tokenizador Gemma não
+  tem nada em comum entre "memoria" e "memória", e sem acento a busca trazia lixo. Cada palavra sem
+  acento vira a grafia acentuada quando o corpus a escreve assim 2,5 vezes mais (amostra de títulos
+  e textos, renovada de hora em hora); stopwords, `NO_ACCENT` (pais, esta, pe) e busca com palavra
+  inglesa ficam como vieram. A resposta traz `corrected`; o MCP mostra "Buscado como", o SearXNG
+  põe em `corrections`, o frontend mostra o aviso. Só o BM25 e o snippet usam a correção; vetor e
+  bônus de título já ignoram acento. Medido em 14 pares com e sem acento: sobreposição com a busca
+  acentuada 20 -> 134 de 140. Acrescentar a grafia em vez de trocar não melhorou nada (25 -> 25).
+  Reindexar tudo sem acento resolveria também página escrita sem acento, mas custa retokenizar o
+  índice inteiro; ficou de fora.
 - Snippet: janela de 300 caracteres do melhor chunk em volta da primeira palavra da query, ou o
   início da página. Resposta traz url, título, host, snippet, summary, score e a posição em cada
   lista, útil para depurar relevância.

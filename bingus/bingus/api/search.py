@@ -34,6 +34,17 @@ MAX_PER_HOST = 2  # um site ocupa no máximo isso antes de os outros aparecerem
 TITLE_WEIGHT = 1.0
 TITLE_STATS_TTL = 3600
 TITLE_SAMPLE = "SELECT title FROM pages TABLESAMPLE SYSTEM (5) WHERE title IS NOT NULL LIMIT 100000"
+TEXT_SAMPLE = """
+SELECT left(text, 3000) AS text FROM pages TABLESAMPLE SYSTEM (1) WHERE text IS NOT NULL LIMIT 20000
+"""
+# O tokenizador do BM25 não tem nada em comum entre "memoria" e "memória", e quem busca costuma
+# digitar sem acento. A busca troca a palavra pela grafia acentuada quando o corpus quase sempre a
+# escreve assim. Medido em títulos e textos: "historia" 9 x 2276, "memoria" 7 x 993; "video" fica
+# em 3,3 por causa do inglês. Quem tem as duas leituras comuns nunca troca: "pais" (5,3) é pai e
+# país, "esta" é este e está, "pe" é Pernambuco.
+ACCENT_RATIO = 2.5
+NO_ACCENT = {"pais", "esta", "pe"}
+ENGLISH = set("the of to in for and on how what with is are from".split())  # "text to video model"
 STOPWORDS = set(
     "a o as os um uma de da do das dos em no na nos nas para pra por com sem e ou que como qual"
     " quais é ser se ao aos à às the of to in for and on how what".split()
@@ -64,12 +75,14 @@ query_vectors: dict[str, tuple[float, str]] = {}  # query normalizada -> (expira
 
 
 class TitleStats:
-    """Em quantos títulos de uma amostra do índice cada palavra aparece. Renovada de hora em hora,
-    em segundo plano; vazia, todos os termos pesam igual."""
+    """Em quantos títulos de uma amostra do índice cada palavra aparece, e a grafia acentuada usual
+    de cada palavra. Renovada de hora em hora, em segundo plano; vazia, todos os termos pesam igual
+    e nada é corrigido."""
 
     def __init__(self) -> None:
         self.df: Counter[str] = Counter()
         self.docs = 0
+        self.accents: dict[str, str] = {}  # "memoria" -> "memória"
         self.at = -TITLE_STATS_TTL
         self.task: asyncio.Task[None] | None = None
 
@@ -154,7 +167,7 @@ def searxng(res: dict) -> dict:
         "number_of_results": len(results),
         "results": results,
         "answers": [],
-        "corrections": [],
+        "corrections": [res["corrected"]] if res.get("corrected") else [],
         "infoboxes": [],
         "suggestions": [],
         "unresponsive_engines": [["bingus-vetorial", w] for w in res["warnings"]],
@@ -178,10 +191,11 @@ async def run_search(
             "warnings": warnings,
         }
     pool = db.pool()
+    corrected = correct(q) if boosts else None
     try:
         async with pool.acquire() as conn, conn.transaction():
             await conn.execute(f"SET LOCAL bm25_catalog.bm25_limit = {CANDIDATES}")
-            lexical = [r["id"] for r in await conn.fetch(BM25, q, CANDIDATES)]
+            lexical = [r["id"] for r in await conn.fetch(BM25, corrected or q, CANDIDATES)]
     except Exception as e:
         log.warning("bm25 failed: %s", e)
         lexical = []
@@ -279,7 +293,7 @@ async def run_search(
                 "url": p["url"],
                 "title": p["title"],
                 "host": p["host"],
-                "snippet": snippet(p["text"], q, best_chunk.get(page_id)),
+                "snippet": snippet(p["text"], corrected or q, best_chunk.get(page_id)),
                 "summary": summary,
                 "score": round(scores[page_id], 4),
                 "rank": round(p["rank"], 3),
@@ -290,6 +304,7 @@ async def run_search(
         )
     return {
         "query": q,
+        "corrected": corrected,
         "offset": offset,
         "has_more": offset + limit < len(ordered),
         "results": results,
@@ -370,20 +385,54 @@ async def embed_query(q: str) -> str | None:
 async def refresh_titles(pool: asyncpg.Pool) -> None:
     try:
         rows = await pool.fetch(TITLE_SAMPLE)
+        texts = [r["text"] for r in await pool.fetch(TEXT_SAMPLE)]
     except Exception as e:
         log.warning("title stats failed: %s", e)
         return
+    heads = [r["title"] for r in rows]
+    # uns segundos de CPU: numa thread, para não parar as buscas em andamento
+    df, accents = await asyncio.to_thread(count_words, heads, texts)
+    titles.df, titles.docs, titles.accents = df, len(rows), accents
+    log.info("title stats: %d titles, %d words, %d accents", len(rows), len(df), len(accents))
+
+
+def count_words(heads: list[str], texts: list[str]) -> tuple[Counter[str], dict[str, str]]:
     df: Counter[str] = Counter()
-    for r in rows:
-        df.update(set(words(r["title"])))
-    titles.df, titles.docs = df, len(rows)
-    log.info("title stats: %d titles, %d words", len(rows), len(df))
+    for title in heads:
+        df.update(set(words(title)))
+    spelled: Counter[str] = Counter()
+    for text in heads + texts:
+        spelled.update(re.findall(r"[^\W\d_]+", text.lower()))
+    accents: dict[str, str] = {}
+    for word, n in spelled.most_common():  # a grafia mais comum de cada palavra vem primeiro
+        bare = plain(word)
+        usual = n >= 3 and n >= ACCENT_RATIO * spelled[bare]
+        if bare and bare != word and bare not in accents and usual:
+            accents[bare] = word
+    return df, accents
+
+
+def correct(q: str) -> str | None:
+    """The query with the corpus' usual accents, or None when nothing changes."""
+    if ENGLISH & set(re.findall(r"[a-z]+", q.lower())):
+        return None
+
+    def fix(m: re.Match[str]) -> str:
+        word = m.group().lower()
+        keep = word in STOPWORDS or word in NO_ACCENT
+        return m.group() if keep else titles.accents.get(word, m.group())
+
+    fixed = re.sub(r"[^\W\d_]+", fix, q)
+    return fixed if fixed != q else None
+
+
+def plain(text: str) -> str:
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
 
 
 def words(text: str) -> list[str]:
     """Lowercase terms without accents; numbers stay whole and hyphens split words."""
-    plain = unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
-    return re.findall(r"[a-z0-9]+", plain)
+    return re.findall(r"[a-z0-9]+", plain(text.lower()))
 
 
 async def navigational(pool: asyncpg.Pool, q: str) -> int | None:
