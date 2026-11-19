@@ -1,7 +1,14 @@
+# Tudo roda dentro do bingus.slice (teto de 32 GB e 16 CPUs na máquina compartilhada). Sem o slice
+# instalado o systemd cria um vazio, sem teto. Os limites por serviço somam mais que o teto de
+# propósito: o slice é o limite real, eles só impedem um serviço de engolir os outros.
 services:
   postgres:
     image: tensorchord/vchord-suite:pg18-latest
     env_file: .env
+    restart: unless-stopped
+    cgroup_parent: bingus.slice
+    mem_limit: 20g
+    shm_size: 2g
     command:
       - postgres
       - -c
@@ -13,19 +20,24 @@ services:
       - -c
       - wal_compression=lz4
       - -c
-      - shared_buffers=2GB
+      - shared_buffers=8GB
       - -c
-      - effective_cache_size=8GB
+      - effective_cache_size=20GB
       - -c
-      - maintenance_work_mem=1GB
+      - maintenance_work_mem=2GB
       - -c
       - work_mem=64MB
       - -c
-      - max_wal_size=4GB
+      - max_wal_size=16GB
+      - -c
+      - checkpoint_timeout=30min
+      # Uma queda perde os últimos segundos de ingestão, que o crawler refaz. Nunca corrompe.
+      - -c
+      - synchronous_commit=off
     ports:
       - "${BINGUS_PG_BIND:-127.0.0.1:5432}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql
+      - ${BINGUS_PG_DATA:-pgdata}:/var/lib/postgresql
       - ./bingus/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
@@ -35,10 +47,21 @@ services:
 
   api:
     image: shiftsad/bingus:api
+    build:
+      context: ./bingus
+      args:
+        EXTRA: api
     env_file: .env
+    environment:
+      PYTHONUNBUFFERED: 1
+    restart: unless-stopped
+    cgroup_parent: bingus.slice
+    mem_limit: 14g  # bingus-rank roda aqui dentro e chega a uns 12 GB com 10 milhões de páginas
     command: bingus-api
     ports:
       - "${BINGUS_API_BIND:-127.0.0.1:8000}:8000"
+    volumes:
+      - ${BINGUS_DATA:-./data}:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,25 +71,46 @@ services:
       context: ./frontend
       args:
         VITE_API_URL: ${VITE_API_URL:-https://api.shiftsad.dev}
+    restart: unless-stopped
+    cgroup_parent: bingus.slice
+    mem_limit: 256m
     ports:
       - "${BINGUS_WEB_BIND:-127.0.0.1:8080}:80"
 
   # Workers na mesma máquina: docker compose --profile workers up -d
   fetch:
     image: shiftsad/bingus:fetch
+    build:
+      context: ./bingus
+      args:
+        EXTRA: fetch
     profiles: ["workers"]
+    restart: unless-stopped
+    cgroup_parent: bingus.slice
+    mem_limit: 2g
     command: bingus-fetch
     environment:
+      PYTHONUNBUFFERED: 1
       BINGUS_API_URL: http://api:8000
       BINGUS_API_KEY: ${BINGUS_FETCH_KEY}
-      BINGUS_HOSTS: 20
+      BINGUS_HOSTS: ${BINGUS_FETCH_HOSTS:-20}
+    deploy:
+      replicas: ${BINGUS_FETCH_REPLICAS:-1}
     depends_on: [api]
 
   embed:
     image: shiftsad/bingus:embed
+    build:
+      context: ./bingus
+      args:
+        EXTRA: embed
     profiles: ["workers"]
+    restart: unless-stopped
+    cgroup_parent: bingus.slice
+    mem_limit: 8g
     command: bingus-embed
     environment:
+      PYTHONUNBUFFERED: 1
       BINGUS_API_URL: http://api:8000
       BINGUS_API_KEY: ${BINGUS_EMBED_KEY}
       BINGUS_EMBED_BATCH: ${BINGUS_EMBED_BATCH:-8}
@@ -75,7 +119,7 @@ services:
     expose:
       - "8100"
     volumes:
-      - hf_cache:/root/.cache/huggingface
+      - ${BINGUS_HF_CACHE:-hf_cache}:/root/.cache/huggingface
     deploy:
       resources:
         reservations:
