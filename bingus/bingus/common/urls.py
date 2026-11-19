@@ -13,11 +13,13 @@ SKIP_EXT: tuple[str, ...] = tuple(
         + " .woff .woff2 .ttf .doc .docx .xls .xlsx .ppt .pptx .exe .apk .dmg .iso"
     ).split()
 )
-MAX_LEN = 2048
-# Redes sociais e afins: sem conteúdo útil e infinitos.
+MAX_LEN = 512  # mais que isso é link de rastreamento ou URL gerada, quase nunca uma página
+# Redes sociais e afins: sem conteúdo útil e infinitos. Depois, rastreamento de anúncios.
 BLOCKED_HOSTS = (
     "youtube.com youtu.be instagram.com facebook.com twitter.com x.com linkedin.com tiktok.com"
     + " whatsapp.com apple.com play.google.com web.archive.org t.me pinterest.com spotify.com"
+    + " wa.me cxense.com doubleclick.net googlesyndication.com googleadservices.com adj.st"
+    + " adjust.com onelink.me app.link"
 ).split()
 
 
