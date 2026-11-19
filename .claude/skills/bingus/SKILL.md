@@ -157,6 +157,7 @@ Endpoints em `bingus/api/fetch.py`. Os modelos pydantic lá são a definição d
   `seeded`, e a lease de hosts os serve antes de qualquer outro: sem isso, 90 mil hosts `.br`
   novos deixavam as fontes de IA semeadas sem nenhuma visita.
 - `POST /metrics`: amostras de telemetria do worker, a cada ~10 s, mesma chave.
+- `GET /metrics`: formato do Prometheus, com chave, para o Alloy. Ver Métricas.
 - `GET /health`.
 
 Resultado de página: `status` 0 é erro de rede. `final_url` só quando houve redirect. `text` com o
@@ -366,8 +367,9 @@ CommonCrawl filtrado por Brasil entra da mesma forma no futuro.
 
 ## Métricas
 
-Sem Prometheus. Tudo vai para o Postgres e o Grafana lê com a datasource Postgres, usando um
-usuário só de leitura. Três tabelas, todas com retenção de 90 dias, limpas pela própria API:
+A fonte é o Postgres: o Grafana do compose lê com a datasource Postgres, usando um usuário só de
+leitura. Para o Prometheus da máquina há também o `GET /metrics`, ver abaixo. Três tabelas, todas
+com retenção de 90 dias, limpas pela própria API:
 
 - `worker_samples`: o worker faz push a cada ~10 s em `POST /metrics` com a mesma chave.
   Vai junto `instance`, o hostname ou `BINGUS_NAME`, e a API grava `worker` como `fetch/nome`:
@@ -389,6 +391,29 @@ rejeitadas por idioma, que ficam com `lang` e sem `content_hash`.
 Ao mexer, valide cada query no psql trocando `$__timeGroupAlias` por `date_trunc` e
 `$__timeFilter` por um filtro de data.
 
+### Prometheus
+
+A máquina já tem Grafana, Prometheus central em `10.10.0.1:9090` (remote write aberto, sem
+credencial, retenção de 30 dias) e um Alloy do sistema, que não é nosso, mandando o node exporter
+com `instance="craftsapiens"` e `job="craftsapiens"`. O Bingus não mexe nele: o compose tem um
+Alloy próprio (`alloy/config.alloy`, imagem fixa) que raspa `GET /metrics` da API a cada 15 s
+pela rede do compose e faz remote write para o mesmo Prometheus, com a mesma `instance` e
+`job="bingus"`. Job igual ao do node exporter faria o `up` dos dois Alloys virar uma série só.
+
+- `GET /metrics` pede uma chave como os workers: `metrics:<chave>` em `BINGUS_API_KEYS` e a mesma
+  chave em `BINGUS_METRICS_KEY`, que o compose passa ao Alloy. A API é pública pelo Caddy.
+- Formato texto do Prometheus escrito à mão em `api/metrics.py`, sem dependência. Custa duas
+  consultas de poucos milissegundos: `n_live_tup` de `pg_stat_user_tables` para as tabelas,
+  `reltuples` dos índices parciais de chunks, `null_frac` de `pages.text` para páginas com texto,
+  a última linha de `api_samples` para hosts vencidos e em lease, e os tamanhos.
+  Depois de uma queda do Postgres o `n_live_tup` zera até o próximo ANALYZE.
+- Os contadores (`*_total`) vivem na memória da API, alimentados por `record_batch` e pelo
+  `POST /metrics` dos workers, e zeram quando ela reinicia; o `rate()` entende. Somar a tabela
+  `batches` não serve: a limpeza dos 90 dias faria o total cair, e o Prometheus leria a queda como
+  restart, com um pico do tamanho do total. Lotes do `bingus-seed`, processo à parte, não entram.
+- Dashboard em `grafana/bingus-prometheus.json`, datasource Prometheus na variável `DS` e
+  máquina em `instance`, com uma linha de node exporter no fim.
+
 ## Deploy
 
 Imagens no Docker Hub: `shiftsad/bingus:api`, `:fetch`, `:embed`. O compose usa as imagens e sabe
@@ -407,7 +432,8 @@ Na máquina compartilhada:
   ativado, senão tudo morre quando as sessões fecham.
 - `.env` daqui, além do que vem abaixo: `BINGUS_PG_DATA=/home/sadness/bingus-data/pg`,
   `BINGUS_HF_CACHE=/home/sadness/.cache/bingus-hf`, `BINGUS_DATA=/mnt/hdd/bingus` (vira `/data` na
-  API), `BINGUS_FETCH_REPLICAS=0` (workers nativos, ver Protocolo), `BINGUS_MCP_HOSTS`, binds em
+  API), `BINGUS_FETCH_REPLICAS=0` (workers nativos, ver Protocolo), `BINGUS_MCP_HOSTS`,
+  `BINGUS_METRICS_KEY` (ver Prometheus, em Métricas), binds em
   `10.10.0.50` portas 2026 (API), 2027 (web) e 2028 (Grafana), Postgres em `127.0.0.1:5432`. A porta
   8080 já é usada por outro serviço da máquina.
 - Grafana no compose (`grafana/provisioning`): datasource com o usuário `grafana` só de leitura,

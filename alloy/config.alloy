@@ -1,0 +1,19 @@
+// Raspa o GET /metrics da API e manda para o Prometheus central, o mesmo do Alloy da máquina.
+// instance igual à do node exporter daqui, para o Grafana cruzar as séries. job próprio: com o
+// mesmo job, o up e os scrape_* dos dois Alloys virariam uma série só.
+prometheus.scrape "bingus" {
+  targets = [{
+    __address__ = "api:8000",
+    instance    = "craftsapiens",
+    job         = "bingus",
+  }]
+  bearer_token    = sys.env("BINGUS_METRICS_KEY")
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.central.receiver]
+}
+
+prometheus.remote_write "central" {
+  endpoint {
+    url = "http://10.10.0.1:9090/api/v1/write"
+  }
+}

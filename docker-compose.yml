@@ -98,6 +98,24 @@ services:
       - grafana:/var/lib/grafana
     depends_on: [postgres]
 
+  # GET /metrics da API para o Prometheus central da máquina, ver alloy/config.alloy. A chave
+  # também entra em BINGUS_API_KEYS. Sem depends_on, para o up dele nunca recriar a API.
+  alloy:
+    image: grafana/alloy:v1.21.3
+    restart: unless-stopped
+    cgroup_parent: bingus.slice
+    mem_limit: 256m
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      - --disable-reporting
+    environment:
+      BINGUS_METRICS_KEY: ${BINGUS_METRICS_KEY}
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy:/var/lib/alloy/data
+
   # Workers na mesma máquina: docker compose --profile workers up -d
   fetch:
     image: shiftsad/bingus:fetch
@@ -155,3 +173,4 @@ volumes:
   pgdata:
   hf_cache:
   grafana:
+  alloy:
