@@ -16,7 +16,7 @@
         "name": "DS",
         "label": "Postgres",
         "type": "datasource",
-        "query": "grafana-postgres-datasource",
+        "query": "grafana-postgresql-datasource",
         "current": {},
         "options": [],
         "refresh": 1
@@ -42,7 +42,7 @@
       "type": "stat",
       "title": "Páginas",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -54,7 +54,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -84,7 +84,7 @@
       "type": "stat",
       "title": "Frontier",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -96,7 +96,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -126,7 +126,7 @@
       "type": "stat",
       "title": "Chunks sem embedding",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -138,7 +138,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -168,7 +168,7 @@
       "type": "stat",
       "title": "Hosts",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -180,7 +180,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -210,7 +210,7 @@
       "type": "stat",
       "title": "Hosts na fila",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -222,7 +222,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -253,7 +253,7 @@
       "type": "stat",
       "title": "Hosts em lease",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -265,7 +265,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -308,7 +308,7 @@
       "type": "stat",
       "title": "Workers ativos",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -320,7 +320,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -350,7 +350,7 @@
       "type": "stat",
       "title": "Páginas por segundo",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -362,7 +362,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -392,7 +392,7 @@
       "type": "stat",
       "title": "Download",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -404,7 +404,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -434,7 +434,7 @@
       "type": "stat",
       "title": "Requisições por segundo",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -446,7 +446,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -476,7 +476,7 @@
       "type": "stat",
       "title": "Chunks embedados por segundo",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -488,7 +488,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -518,7 +518,7 @@
       "type": "stat",
       "title": "Tempo até terminar os embeddings",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -530,7 +530,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -573,7 +573,7 @@
       "type": "timeseries",
       "title": "Embedados e enfileirados por segundo",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -585,7 +585,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -613,7 +613,7 @@
       "type": "stat",
       "title": "Saldo do backlog na última hora",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -625,7 +625,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -656,7 +656,7 @@
       "type": "stat",
       "title": "Embedados nas últimas 24 h",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -668,7 +668,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -698,7 +698,7 @@
       "type": "stat",
       "title": "Enfileirados nas últimas 24 h",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -710,7 +710,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -740,7 +740,7 @@
       "type": "table",
       "title": "Últimos embeddings",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -752,7 +752,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -785,7 +785,7 @@
       "type": "timeseries",
       "title": "Páginas por segundo",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -797,7 +797,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -825,7 +825,7 @@
       "type": "timeseries",
       "title": "Download",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -837,7 +837,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -865,7 +865,7 @@
       "type": "timeseries",
       "title": "Requisições por segundo",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -877,7 +877,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -905,7 +905,7 @@
       "type": "timeseries",
       "title": "CPU por worker (núcleos)",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -917,7 +917,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -945,7 +945,7 @@
       "type": "timeseries",
       "title": "Erros por minuto, por tipo",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -957,7 +957,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -985,7 +985,7 @@
       "type": "timeseries",
       "title": "Chunks embedados por segundo, por worker",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -997,7 +997,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -1038,7 +1038,7 @@
       "type": "timeseries",
       "title": "Desfecho das páginas por segundo",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -1050,7 +1050,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -1081,7 +1081,7 @@
       "type": "timeseries",
       "title": "Taxa de sucesso",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -1093,7 +1093,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -1122,7 +1122,7 @@
       "type": "timeseries",
       "title": "Tempo de ingestão por lote",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -1134,7 +1134,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -1163,7 +1163,7 @@
       "type": "timeseries",
       "title": "Frontier e chunks enfileirados por segundo",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -1175,7 +1175,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -1203,7 +1203,7 @@
       "type": "bargauge",
       "title": "Outros idiomas, total",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -1215,7 +1215,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -1245,7 +1245,7 @@
       "type": "table",
       "title": "Últimas páginas em outro idioma",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -1257,7 +1257,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -1290,7 +1290,7 @@
       "type": "table",
       "title": "Últimas páginas novas",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -1302,7 +1302,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -1322,7 +1322,7 @@
       "type": "table",
       "title": "Últimos lotes",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -1334,7 +1334,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -1367,7 +1367,7 @@
       "type": "table",
       "title": "Hosts com mais páginas",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -1379,7 +1379,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,
@@ -1399,7 +1399,7 @@
       "type": "table",
       "title": "Páginas com maior rank",
       "datasource": {
-        "type": "grafana-postgres-datasource",
+        "type": "grafana-postgresql-datasource",
         "uid": "${DS}"
       },
       "gridPos": {
@@ -1411,7 +1411,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgres-datasource",
+            "type": "grafana-postgresql-datasource",
             "uid": "${DS}"
           },
           "rawQuery": true,

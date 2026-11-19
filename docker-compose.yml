@@ -78,6 +78,26 @@ services:
     ports:
       - "${BINGUS_WEB_BIND:-127.0.0.1:8080}:80"
 
+  # Dashboard de grafana/bingus.json, lendo o Postgres com o usuário só de leitura grafana.
+  grafana:
+    image: grafana/grafana-oss:12.4.3
+    restart: unless-stopped
+    cgroup_parent: bingus.slice
+    mem_limit: 512m
+    environment:
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"  # só alcançável pela WireGuard: ver sem login
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/bingus.json
+    ports:
+      - "${BINGUS_GRAFANA_BIND:-127.0.0.1:3000}:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/bingus.json:/var/lib/grafana/dashboards/bingus.json:ro
+      - grafana:/var/lib/grafana
+    depends_on: [postgres]
+
   # Workers na mesma máquina: docker compose --profile workers up -d
   fetch:
     image: shiftsad/bingus:fetch
@@ -134,3 +154,4 @@ services:
 volumes:
   pgdata:
   hf_cache:
+  grafana:

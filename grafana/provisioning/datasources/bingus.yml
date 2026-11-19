@@ -1,0 +1,15 @@
+apiVersion: 1
+datasources:
+  - name: Bingus
+    uid: bingus-pg
+    type: grafana-postgresql-datasource
+    url: postgres:5432
+    user: grafana
+    isDefault: true
+    secureJsonData:
+      password: $GRAFANA_DB_PASSWORD
+    jsonData:
+      database: bingus
+      sslmode: disable
+      postgresVersion: 1800
+      timescaledb: false
