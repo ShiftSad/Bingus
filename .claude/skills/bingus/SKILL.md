@@ -479,7 +479,9 @@ no topo, uma linha Recursos (GPU pelo `worker_samples` e máquina pelo node expo
 variável `PROM`), sites ordenados por `pt_count` (o `page_count` conta falhas: hardmob tinha 19 mil
 visitadas e 2 mil com texto) e a família Radar. Contagens grandes vêm de estimativas do ANALYZE, e
 total e parte saem do mesmo `reltuples`: misturar com `n_live_tup`, que é ao vivo, superestimou os
-chunks com vetor em 50%. Validado num Grafana 13.1.0 descartável: importação pela API v2 e todas as
+chunks com vetor em 50%. E de índices, não da tabela: o `reltuples` da tabela o VACUUM extrapola das
+páginas que leu e ficou 2 milhões abaixo do real, enquanto o de cada índice ele conta inteiro. Chunks
+com vetor é `chunks_pkey` menos `chunks_pending`; com o da tabela, o painel mostrou -289. Validado num Grafana 13.1.0 descartável: importação pela API v2 e todas as
 consultas por `/api/ds/query`, que expande as macros de verdade.
 
 ### Prometheus
