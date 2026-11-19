@@ -326,6 +326,14 @@ Tavily piorou os resultados; o Exa vai com `userLocation: "BR"`.
 - As 1.846 URLs citadas foram semeadas com prioridade 6 e `langs` de cada host intocado. Seis
   documentações em inglês citadas mais de uma vez foram desbloqueadas com `{pt,en}`: docs.docker.com,
   docs.gitlab.com, ubuntu.com, freecodecamp, geeksforgeeks, cloud.google.com.
+- Uso real: o log de um bot de Discord de um amigo, na mesma bolha tech (`~/bingus-data/api`),
+  tem 209 buscas no Tavily de 8 a 18/11, metade em inglês: notícias do dia ("notícias boas" de
+  ciência), preço e lançamento de modelos de IA, hardware, hospedagem e e-mail, eletrônica DIY.
+  Das 1.148 URLs que ele recebeu, o Bingus tinha 3%; 15% eram de sites em inglês bloqueados pela
+  regra de idioma. Os 552 sites citados passaram a `{pt,en}`, desbloqueados, prioridade 6 com duas
+  citações ou mais e 4 com uma; 840 URLs semeadas. Fora: reddit (robots barra), en.wikipedia,
+  finance.yahoo (republica agências) e rocketreach (dados de pessoas). Do log só se usa a parte do
+  Tavily; as conversas com o LLM e os dados do Discord ficam intocados.
 
 ## API pública
 
