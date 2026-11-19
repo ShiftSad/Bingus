@@ -18,6 +18,7 @@ api = [
     "scipy",
     "trafilatura",
     "py3langid",
+    "mcp",
 ]
 fetch = [
     "trafilatura",

@@ -62,6 +62,11 @@ async def search(
     """
     if not allow(client_ip(request)):
         raise HTTPException(429, "Muitas buscas. Espere um pouco.")
+    return await run_search(q, limit, offset, summaries)
+
+
+async def run_search(q: str, limit: int = 10, offset: int = 0, summaries: bool = True) -> dict:
+    """The search itself, without the per-IP rate limit. The MCP calls this directly."""
     q = q.strip()
     timer = Timer()
     warnings: list[str] = []

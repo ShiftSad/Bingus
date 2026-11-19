@@ -7,14 +7,15 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from bingus.api import db, embed, fetch, metrics, page, search, seed
+from bingus.api import db, embed, fetch, metrics, page, search, seed, tools
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await db.connect()
     sampler = asyncio.create_task(metrics.sample_loop())
-    yield
+    async with tools.server.session_manager.run():  # app montada não roda o próprio lifespan
+        yield
     sampler.cancel()
     await db.close()
 
@@ -32,6 +33,9 @@ app.include_router(seed.router)
 @app.get("/health")
 async def health():
     return {"ok": True}
+
+
+app.mount("/", tools.app)  # MCP em /mcp; por último, porque a montagem casa com qualquer caminho
 
 
 def main() -> None:
