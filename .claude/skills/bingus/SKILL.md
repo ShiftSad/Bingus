@@ -180,9 +180,16 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
   host virava dezenas por
   segundo e uma linha em `batches` para cada. Antes o lote inteiro esperava o host mais lento e o
   worker fazia 2 páginas por segundo. Um host recebe no máximo 60 segundos de trabalho por lote.
-  Throughput se ajusta em `BINGUS_HOSTS`, não em URLs por host; extração é uma thread só. Num crawl
-  novo quase todo host tem uma URL e custa um robots.txt: com 40 hosts em voo o worker ficava ocioso,
-  150 é o valor desta máquina.
+  Throughput se ajusta em `BINGUS_HOSTS`, não em URLs por host; extração é uma thread só.
+- Um worker satura um núcleo (GIL: HTTP, extração e links no mesmo processo), então se escala em
+  processos. Nesta máquina: 10 workers nativos com 60 hosts em voo, uns 20 páginas novas por segundo
+  no total. Extração custava 258 ms de CPU por página, 85% no `bare_extraction`; com `fast=True` do
+  trafilatura caiu 2,4x, artigos idênticos, e homes de portal viram hubs.
+- Nesta máquina os fetch workers rodam fora do Docker (`systemd/bingus-fetch@.service`, venv em
+  `~/bingus-data/fetch-venv`, env em `~/.config/bingus/fetch.env`): a rede do Docker rootless
+  (gvisor-tap-vsock) entregava uns 5 MB/s somando todos os containers, contra 60 MB/s do host. O
+  venv é instalado sem editable; mudou o código do fetch, rode o `uv sync` do cabeçalho de
+  `systemd/bingus.slice` e reinicie as instâncias. As réplicas de fetch do compose ficam em 0.
 - `docker stop` (SIGTERM) faz o worker enviar o que está pronto e devolver os hosts em voo em
   `POST /fetch/release`, com `stop_grace_period` de 30 s. A devolução vem antes do envio, para um
   envio que falha não impedi-la. Sem isso, cada deploy deixava centenas de hosts alugados e o worker
@@ -359,9 +366,17 @@ Na máquina compartilhada:
   ativado, senão tudo morre quando as sessões fecham.
 - `.env` daqui, além do que vem abaixo: `BINGUS_PG_DATA=/home/sadness/bingus-data/pg`,
   `BINGUS_HF_CACHE=/home/sadness/.cache/bingus-hf`, `BINGUS_DATA=/mnt/hdd/bingus` (vira `/data` na
-  API), `BINGUS_FETCH_REPLICAS=4`, `BINGUS_FETCH_HOSTS=150`, `BINGUS_MCP_HOSTS`, binds em `10.10.0.50`
-  portas 2026 (API) e 2027 (web), Postgres em `127.0.0.1:5432`. A porta 8080 já é usada por outro
-  serviço da máquina.
+  API), `BINGUS_FETCH_REPLICAS=0` (workers nativos, ver Protocolo), `BINGUS_MCP_HOSTS`, binds em
+  `10.10.0.50` portas 2026 (API), 2027 (web) e 2028 (Grafana), Postgres em `127.0.0.1:5432`. A porta
+  8080 já é usada por outro serviço da máquina.
+- Grafana no compose (`grafana/provisioning`): datasource com o usuário `grafana` só de leitura,
+  dashboard `grafana/bingus.json` como home, anônimo como Viewer porque só a WireGuard alcança.
+  O dashboard pedia o plugin `grafana-postgres-datasource`; o id real é `grafana-postgresql-datasource`.
+- `docker compose up -d` de um serviço recria as dependências que mudaram: o Postgres foi recriado
+  por tabela depois de uma mudança no healthcheck. Para não mexer nelas, `up -d --no-deps`.
+- PageRank em 15 mil páginas: agências que assinam o rodapé dos clientes ("feito por") sobem para o
+  topo dos hosts. Pouco estrago na busca, onde o rank pesa metade e só entre candidatos; contar um
+  link por par de hosts resolveria.
 - O diretório de dados do Postgres precisa de permissão 755 no host: com 700 o usuário `postgres` do
   container, mapeado num subuid, não entra e o container reinicia em loop.
 - Postgres com `shared_buffers` 8 GB, `effective_cache_size` 20 GB, `synchronous_commit=off` (uma

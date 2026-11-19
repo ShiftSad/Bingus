@@ -6,7 +6,7 @@
 # BINGUS_API_URL, BINGUS_API_KEY e BINGUS_HOSTS:
 #   cd bingus && UV_PROJECT_ENVIRONMENT=~/bingus-data/fetch-venv uv sync --frozen --no-dev \
 #       --extra fetch --python 3.12 --no-editable
-#   systemctl --user enable --now bingus-fetch@{1..4}
+#   systemctl --user enable --now bingus-fetch@{1..10}
 [Unit]
 Description=Bingus
 
