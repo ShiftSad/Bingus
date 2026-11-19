@@ -191,6 +191,16 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
   (gvisor-tap-vsock) entregava uns 5 MB/s somando todos os containers, contra 60 MB/s do host. O
   venv é instalado sem editable; mudou o código do fetch, rode o `uv sync` do cabeçalho de
   `systemd/bingus.slice` e reinicie as instâncias. As réplicas de fetch do compose ficam em 0.
+- robots.txt é interpretado com `protego`, pela RFC 9309: vale a regra mais específica. O
+  `RobotFileParser` do Python usa a primeira que casa, e um `Allow: /` antes dos Disallow (comum,
+  é o caso do radargpu) liberava o site inteiro. A URL também é testada com barra no fim do caminho,
+  porque a normalização a tira e `Disallow: /x/` não pegava `/x?a=1`.
+- 429 ou 503 numa página: o worker dobra o `crawl_delay` do host (de 5 a 60 s), grava pelo
+  resultado do host e deixa o resto do lote na fila.
+- Extração: `<form>` é desembrulhado (ASP.NET e fóruns Invision põem a página inteira num, e o
+  trafilatura apaga form com conteúdo), `<article>` com irmão `<article>` vira `div` (senão só o
+  primeiro card sobrevivia), página com `DiscussionForumPosting` sai sem `favor_precision` (que
+  apaga posts de fórum) e href quebrado é descartado em vez de derrubar a página.
 - robots.txt e sitemaps baixam com teto de 10 MB (inclusive depois de descompactar) e 20 s por
   arquivo, e a lista de URLs é cortada antes de normalizar. Sem isso, sitemaps de portal com
   centenas de MB levavam minutos, a lease vencia no meio, outro worker pegava o host e os maiores
