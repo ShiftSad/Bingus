@@ -331,7 +331,9 @@ Tavily piorou os resultados; o Exa vai com `userLocation: "BR"`.
   ciência), preço e lançamento de modelos de IA, hardware, hospedagem e e-mail, eletrônica DIY.
   Das 1.148 URLs que ele recebeu, o Bingus tinha 3%; 15% eram de sites em inglês bloqueados pela
   regra de idioma. Os 552 sites citados passaram a `{pt,en}`, desbloqueados, prioridade 6 com duas
-  citações ou mais e 4 com uma; 840 URLs semeadas. Fora: reddit (robots barra), en.wikipedia,
+  citações ou mais e 4 com uma; 840 URLs semeadas. Com o ok do amigo, as mesmas buscas no Exa
+  (US$ 1,46) trouxeram 1.796 URLs a mais, quase sem redes sociais: mais 1.047 sites pela mesma regra,
+  313 com prioridade 6 somando as citações dos dois, 1.506 URLs novas na fila. Fora: reddit (robots barra), en.wikipedia,
   finance.yahoo (republica agências) e rocketreach (dados de pessoas). Do log só se usa a parte do
   Tavily; as conversas com o LLM e os dados do Discord ficam intocados.
 
