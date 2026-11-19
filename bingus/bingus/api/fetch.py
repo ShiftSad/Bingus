@@ -1,9 +1,11 @@
+import asyncio
 import datetime as dt
+import logging
 import time
 from collections import Counter
 
 import asyncpg
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
 from bingus.api import db, metrics
@@ -11,6 +13,7 @@ from bingus.api.deps import GzipRoute, worker
 from bingus.common.hashing import content_hash, hamming, url_hash
 from bingus.common.urls import host_of
 
+log = logging.getLogger("bingus.fetch")
 router = APIRouter(prefix="/fetch", route_class=GzipRoute)
 
 NEW_INTERVAL = dt.timedelta(days=7)
@@ -159,14 +162,17 @@ WHERE url_hash = $1
 """
 
 UPSERT_CHUNK = """
-INSERT INTO chunks (page_id, seq, start_ch, end_ch, simhash) VALUES ($1, $2, $3, $4, $5)
+INSERT INTO chunks (page_id, seq, start_ch, end_ch, simhash, priority)
+VALUES ($1, $2, $3, $4, $5, embed_priority($6, $7))
 ON CONFLICT (page_id, seq) DO UPDATE SET start_ch = EXCLUDED.start_ch, end_ch = EXCLUDED.end_ch,
-    simhash = EXCLUDED.simhash, embedding = NULL, leased_until = NULL
+    simhash = EXCLUDED.simhash, priority = EXCLUDED.priority, embedding = NULL, leased_until = NULL
 """
 
+# Ainda sem vetor na gêmea, a cópia fica pendente e recebe o vetor quando a gêmea for embedada.
 COPY_CHUNKS = """
-INSERT INTO chunks (page_id, seq, start_ch, end_ch, simhash, embedding)
-SELECT $1, seq, start_ch, end_ch, simhash, embedding FROM chunks WHERE page_id = $2
+INSERT INTO chunks (page_id, seq, start_ch, end_ch, simhash, embedding, priority)
+SELECT $1, seq, start_ch, end_ch, simhash, embedding, embed_priority($3, $4)
+FROM chunks WHERE page_id = $2
 """
 
 ADD_FRONTIER = f"""
@@ -219,6 +225,18 @@ async def batch(hosts: int = 10, per_host: int = 10, name: str = Depends(worker)
 
 @router.post("/results")
 async def results(body: FetchResults, name: str = Depends(worker)):
+    # Vários workers e o seed disputam as mesmas linhas de hosts: deadlock repete o lote.
+    for attempt in range(5):
+        try:
+            await save_results(body, name)
+            return {"ok": True}
+        except asyncpg.DeadlockDetectedError:
+            log.warning("deadlock, retrying results from %s (%d)", name, attempt + 1)
+            await asyncio.sleep(1 + attempt)
+    raise HTTPException(503, "Deadlock persistente, reenvie.")
+
+
+async def save_results(body: FetchResults, name: str) -> None:
     started = time.monotonic()
     outcomes: Counter[str] = Counter()
     queued = 0
@@ -226,18 +244,17 @@ async def results(body: FetchResults, name: str = Depends(worker)):
     for url in body.urls:
         add_link(links, url, 0)
     async with db.pool().acquire() as conn, conn.transaction():
-        for host, info in body.hosts.items():
+        for host, info in sorted(body.hosts.items()):
             await conn.execute(SAVE_HOST, host, info.robots, info.crawl_delay, info.sitemaps)
-        for page in body.pages:
+        for page in sorted(body.pages, key=lambda p: host_of(p.url)):
             outcome, n = await ingest(conn, page, links)
             outcomes[outcome] += 1
             queued += n
         added = await add_frontier(conn, links)
-        for host in {host_of(p.url) for p in body.pages} | set(body.hosts):
+        for host in sorted({host_of(p.url) for p in body.pages} | set(body.hosts)):
             await conn.execute(RELEASE_HOST, host)
         ms = int((time.monotonic() - started) * 1000)
         await metrics.record_batch(conn, name, ms, outcomes, added, queued)
-    return {"ok": True}
 
 
 @router.post("/seed")
@@ -264,7 +281,8 @@ async def ingest(conn: Conn, page: PageResult, links: Links) -> tuple[str, int]:
     if await conn.fetchval(ENSURE_PAGE, h, page.url, host, page.depth):
         await conn.execute("UPDATE hosts SET page_count = page_count + 1 WHERE host = $1", host)
     row = await conn.fetchrow(
-        "SELECT id, content_hash, check_interval, fail_count FROM pages WHERE url_hash = $1", h
+        "SELECT id, content_hash, check_interval, fail_count, rank FROM pages WHERE url_hash = $1",
+        h,
     )
     assert row
     interval: dt.timedelta = row["check_interval"]
@@ -316,23 +334,27 @@ async def ingest(conn: Conn, page: PageResult, links: Links) -> tuple[str, int]:
         [url_hash(u) for u in page_links],
         published(page.published),
     )
-    queued = await sync_chunks(conn, row["id"], digest, page.chunks)
+    queued = await sync_chunks(conn, row["id"], digest, page.chunks, host, row["rank"])
     for url in page_links:
         add_link(links, url, page.depth + 1)
     return ("new" if is_new else "changed"), queued
 
 
-async def sync_chunks(conn: Conn, page_id: int, digest: bytes | None, chunks: list[Chunk]) -> int:
+async def sync_chunks(
+    conn: Conn, page_id: int, digest: bytes | None, chunks: list[Chunk], host: str, rank: float
+) -> int:
     """Keep embeddings whose text barely moved; copy them from a page with identical text.
 
     Returns how many chunks were queued for embedding.
     """
-    twin = await conn.fetchval(
-        "SELECT id FROM pages WHERE content_hash = $1 AND id <> $2 LIMIT 1", digest, page_id
+    twin = await conn.fetchval(  # a de menor id é a que a fila do embed atende
+        "SELECT id FROM pages WHERE content_hash = $1 AND id <> $2 ORDER BY id LIMIT 1",
+        digest,
+        page_id,
     )
     if twin:
         await conn.execute("DELETE FROM chunks WHERE page_id = $1", page_id)
-        await conn.execute(COPY_CHUNKS, page_id, twin)
+        await conn.execute(COPY_CHUNKS, page_id, twin, host, rank)
         return 0
     old = dict(await conn.fetch("SELECT seq, simhash FROM chunks WHERE page_id = $1", page_id))
     queued = 0
@@ -346,7 +368,7 @@ async def sync_chunks(conn: Conn, page_id: int, digest: bytes | None, chunks: li
                 c.end,
             )
         else:
-            await conn.execute(UPSERT_CHUNK, page_id, seq, c.start, c.end, c.simhash)
+            await conn.execute(UPSERT_CHUNK, page_id, seq, c.start, c.end, c.simhash, host, rank)
             queued += 1
     await conn.execute("DELETE FROM chunks WHERE page_id = $1 AND seq >= $2", page_id, len(chunks))
     return queued

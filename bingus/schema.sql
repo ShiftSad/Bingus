@@ -60,7 +60,7 @@ CREATE TABLE pages (
 );
 ALTER TABLE pages ALTER COLUMN text SET COMPRESSION lz4;
 CREATE INDEX pages_host_due ON pages (host, next_check_at) WHERE fail_count < 10;
-CREATE INDEX pages_content ON pages (content_hash) WHERE content_hash IS NOT NULL;
+CREATE INDEX pages_content ON pages (content_hash, id) WHERE content_hash IS NOT NULL;
 CREATE INDEX pages_bm25 ON pages USING bm25 (bm25 bm25_ops);
 CREATE INDEX pages_rank ON pages (rank DESC);  -- embed worker pega as melhores páginas antes
 -- Páginas rejeitadas por idioma: só lang e data, sem conteúdo. Para o dashboard.
@@ -77,9 +77,11 @@ CREATE TABLE chunks (
     embedding    rabitq8(512),
     embedded_at  timestamptz,
     leased_until timestamptz,
+    priority     real NOT NULL DEFAULT 0,     -- ordem da fila do embed, ver embed_priority
     PRIMARY KEY (page_id, seq)
 );
-CREATE INDEX chunks_pending ON chunks (page_id) WHERE embedding IS NULL;
+-- A fila do embed: só os pendentes, já na ordem em que a lease os entrega.
+CREATE INDEX chunks_pending ON chunks (priority DESC) WHERE embedding IS NULL;
 CREATE INDEX chunks_embedded_at ON chunks (embedded_at DESC) WHERE embedded_at IS NOT NULL;
 CREATE INDEX chunks_embedding ON chunks USING vchordrq (embedding rabitq8_cosine_ops)
 WITH (options = $$
@@ -137,6 +139,13 @@ model = "gemma2b"
 [[character_filters]]
 to_lowercase = {}
 $$);
+
+-- Prioridade de um chunk na fila do embed: PageRank da página, com a Wikipédia (entre -1 e 0)
+-- atrás de qualquer outro host. Gravada ao enfileirar e refeita pelo bingus-rank.
+CREATE FUNCTION embed_priority(host text, rank real) RETURNS real
+LANGUAGE sql IMMUTABLE AS $f$
+    SELECT CASE WHEN host = 'pt.wikipedia.org' THEN -1 / (1 + rank) ELSE rank END
+$f$;
 
 CREATE FUNCTION pages_bm25() RETURNS trigger LANGUAGE plpgsql AS $f$
 BEGIN

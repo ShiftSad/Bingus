@@ -85,6 +85,14 @@ async def run() -> None:
             lo,
             lo + 50_000,
         )
+    for lo in range(0, int(ids.max()) + 1, 50_000):  # fila do embed segue o rank novo
+        await conn.execute(
+            "UPDATE chunks c SET priority = embed_priority(p.host, p.rank) FROM pages p"
+            + " WHERE c.page_id = p.id AND c.embedding IS NULL AND c.page_id > $1"
+            + " AND c.page_id <= $2 AND c.priority <> embed_priority(p.host, p.rank)",
+            lo,
+            lo + 50_000,
+        )
     await conn.execute(
         "UPDATE hosts h SET rank = s.rank FROM"
         + " (SELECT host, sum(rank) AS rank FROM pages GROUP BY host) s WHERE h.host = s.host"

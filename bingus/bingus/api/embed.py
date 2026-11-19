@@ -11,28 +11,18 @@ router = APIRouter(prefix="/embed")
 
 LEASE = dt.timedelta(minutes=15)
 
-# Páginas de maior PageRank primeiro, deixando a Wikipédia atrás dos demais hosts.
+# Fila por prioridade no índice chunks_pending. Texto igual em várias páginas é embedado uma
+# vez só: a página de menor id leva o chunk, as outras esperam e recebem o vetor em COPY_TO_TWINS.
 LEASE_CHUNKS = """
-WITH non_wikipedia AS MATERIALIZED (
-    SELECT p.id, p.rank FROM pages p
-    WHERE p.host <> 'pt.wikipedia.org'
-      AND EXISTS (SELECT 1 FROM chunks c WHERE c.page_id = p.id AND c.embedding IS NULL
-                  AND (c.leased_until IS NULL OR c.leased_until < now()))
-    ORDER BY p.rank DESC LIMIT $1
-), wikipedia AS (
-    SELECT p.id, p.rank FROM pages p
-    WHERE p.host = 'pt.wikipedia.org'
-      AND EXISTS (SELECT 1 FROM chunks c WHERE c.page_id = p.id AND c.embedding IS NULL
-                  AND (c.leased_until IS NULL OR c.leased_until < now()))
-    ORDER BY p.rank DESC LIMIT greatest($1 - (SELECT count(*) FROM non_wikipedia), 0)
-), due AS (
-    SELECT id, rank, false AS is_wikipedia FROM non_wikipedia
-    UNION ALL
-    SELECT id, rank, true AS is_wikipedia FROM wikipedia
-), picked AS (
-    SELECT c.page_id, c.seq FROM chunks c JOIN due d ON d.id = c.page_id
+WITH picked AS (
+    SELECT c.page_id, c.seq FROM chunks c
     WHERE c.embedding IS NULL AND (c.leased_until IS NULL OR c.leased_until < now())
-    ORDER BY d.is_wikipedia, d.rank DESC LIMIT $1
+      AND NOT EXISTS (
+          SELECT 1 FROM pages p
+          JOIN pages o ON o.content_hash = p.content_hash AND o.id < p.id
+          JOIN chunks oc ON oc.page_id = o.id AND oc.seq = c.seq AND oc.embedding IS NULL
+          WHERE p.id = c.page_id)
+    ORDER BY c.priority DESC LIMIT $1
     FOR UPDATE OF c SKIP LOCKED
 )
 UPDATE chunks c SET leased_until = now() + $2
@@ -45,6 +35,15 @@ SAVE_EMBEDDING = """
 UPDATE chunks
 SET embedding = quantize_to_rabitq8($3::vector), embedded_at = now(), leased_until = NULL
 WHERE page_id = $1 AND seq = $2
+"""
+
+# Gêmeas que esperavam pelo mesmo texto. Sem embedded_at: o painel conta só o trabalho da GPU.
+COPY_TO_TWINS = """
+UPDATE chunks t SET embedding = s.embedding, leased_until = NULL
+FROM chunks s
+JOIN pages a ON a.id = s.page_id
+JOIN pages b ON b.content_hash = a.content_hash AND b.id <> a.id
+WHERE s.page_id = $1 AND s.seq = $2 AND t.page_id = b.id AND t.seq = s.seq AND t.embedding IS NULL
 """
 
 
@@ -63,6 +62,7 @@ async def results(request: Request, name: str = Depends(worker)):
     rows = [(c["page_id"], c["seq"], vector(c["embedding"])) for c in data["chunks"]]
     async with db.pool().acquire() as conn, conn.transaction():
         await conn.executemany(SAVE_EMBEDDING, rows)
+        await conn.executemany(COPY_TO_TWINS, [(page_id, seq) for page_id, seq, _ in rows])
         ms = int((time.monotonic() - started) * 1000)
         await metrics.record_batch(conn, name, ms, chunks_embedded=len(rows))
     return {"ok": True}
