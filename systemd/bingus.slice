@@ -1,0 +1,13 @@
+# Teto de tudo que o Bingus roda numa máquina compartilhada. Os serviços do compose entram aqui
+# por cgroup_parent, os timers por Slice=. Instalar no systemd do usuário (Docker rootless):
+#   cp systemd/* ~/.config/systemd/user/ && systemctl --user daemon-reload
+#   systemctl --user enable --now bingus-diario.timer bingus-vigia.timer
+[Unit]
+Description=Bingus
+
+[Slice]
+MemoryHigh=30G
+MemoryMax=32G
+MemorySwapMax=0
+CPUQuota=1600%
+TasksMax=8192

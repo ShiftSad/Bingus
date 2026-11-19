@@ -1,0 +1,8 @@
+[Unit]
+Description=Bingus: vigia do disco a cada 10 minutos
+
+[Timer]
+OnCalendar=*:0/10
+
+[Install]
+WantedBy=timers.target

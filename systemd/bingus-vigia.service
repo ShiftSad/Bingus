@@ -1,0 +1,9 @@
+[Unit]
+Description=Bingus: vigia do disco
+
+[Service]
+Type=oneshot
+Slice=bingus.slice
+WorkingDirectory=%h/Bingus
+Environment=LIMITE_GB=90
+ExecStart=/bin/sh %h/Bingus/systemd/vigia.sh

@@ -1,0 +1,9 @@
+[Unit]
+Description=Bingus: manutenção diária
+
+[Timer]
+OnCalendar=*-*-* 09:10:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

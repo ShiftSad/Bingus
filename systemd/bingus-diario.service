@@ -1,0 +1,10 @@
+[Unit]
+Description=Bingus: PageRank, reindex do BM25 e vacuum
+
+[Service]
+Type=oneshot
+Slice=bingus.slice
+WorkingDirectory=%h/Bingus
+ExecStart=docker compose exec -T api bingus-rank
+ExecStart=docker compose exec -T postgres psql -U bingus -c "REINDEX INDEX CONCURRENTLY pages_bm25"
+ExecStart=docker compose exec -T postgres psql -U bingus -c "VACUUM ANALYZE pages"
