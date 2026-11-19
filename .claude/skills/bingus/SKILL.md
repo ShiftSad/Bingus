@@ -259,7 +259,10 @@ frontend e o MCP chamam. Híbrida:
 - Ajustes depois da fusão, medidos num A/B às cegas com 40 buscas nerd (nDCG@10 0,471 -> 0,691,
   top1 bom 0,28 -> 0,60): bônus de até uma primeira posição pelas palavras da busca no título ou
   na URL, sem acento e com números inteiros (o tokenizador do BM25 quebra "5060" em dígitos),
-  cada termo pesado pela raridade entre os candidatos; recência só quando a busca pede (notícia,
+  cada termo pesado pela raridade no corpus (amostra de ~27 mil títulos, renovada de hora em hora,
+  em segundo plano). Raridade entre os candidatos invertia a intenção: o termo que trouxe os
+  candidatos aparece em quase todos. Medido às cegas: pesos iguais 0,619, raridade entre
+  candidatos 0,623, raridade no corpus 0,637, fusão sem ajustes 0,430. Recência só quando a busca pede (notícia,
   hoje, lançamento, novo, ano); metade da nota para tag, perfil, autor, categoria e busca interna;
   busca curta que é o nome de um site põe a raiz dele em primeiro, mesmo sendo hub.
   `boosts=false` desliga os ajustes, para comparar. Vetorial busca 400 chunks (uns 3 por página).
