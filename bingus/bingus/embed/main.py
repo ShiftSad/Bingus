@@ -55,6 +55,8 @@ async def work(api: Api, emb: Embedder, stats: Stats) -> None:
             if not chunks:
                 await asyncio.sleep(15)
                 continue
+            # Cada passada é preenchida até o maior texto dela. Em ordem de tamanho, 2x mais rápido.
+            chunks.sort(key=lambda c: len(c["text"]))
             out = []
             for i in range(0, len(chunks), BATCH):
                 part = chunks[i : i + BATCH]
