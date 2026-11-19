@@ -46,6 +46,7 @@ FROM chunks ORDER BY dist LIMIT $2
 """
 
 META = "SELECT id, host, content_hash, rank, published_at FROM pages WHERE id = ANY($1)"
+EMBEDDED = "SELECT DISTINCT page_id FROM chunks WHERE page_id = ANY($1) AND embedding IS NOT NULL"
 PAGES = """
 SELECT id, url, host, title, text, summary, content_hash, rank, published_at
 FROM pages WHERE id = ANY($1)
@@ -118,6 +119,14 @@ async def run_search(q: str, limit: int = 10, offset: int = 0, summaries: bool =
     for ranking, weight in ((lexical, 1.0), (semantic, 1.0), (by_rank, RANK_WEIGHT)):
         for position, page_id in enumerate(ranking):
             scores[page_id] = scores.get(page_id, 0) + weight / (RRF_K + position)
+    if vec:
+        # Página ainda na fila do embed não tem como aparecer na lista vetorial: a posição lexical
+        # vale pelas duas. Sem isso, com o embed atrás do crawler, o primeiro do BM25 perdia para
+        # qualquer home antiga já embedada que aparecesse lá pelo meio das duas listas.
+        embedded = {r["page_id"] for r in await pool.fetch(EMBEDDED, lexical)}
+        for position, page_id in enumerate(lexical):
+            if page_id not in embedded:
+                scores[page_id] += 1 / (RRF_K + position)
     today = dt.date.today()
     for page_id in candidates:  # bônus por recência: vale meia primeira posição e decai em meses
         if meta[page_id]["published_at"]:
