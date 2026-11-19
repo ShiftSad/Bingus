@@ -490,7 +490,10 @@ Na máquina compartilhada:
   `10.10.0.50` portas 2026 (API), 2027 (web), 2028 (Grafana) e 5432 (Postgres, para o Grafana do
   usuário, como era no dedicado). A porta 8080 já é usada por outro serviço da máquina. O Docker
   rootless entrega as conexões da porta publicada vindas de 172.19.0.1, então o `trust` do
-  pg_hba para 127.0.0.1 não vale para quem vem de fora: tudo pede senha. O Postgres tem
+  pg_hba para 127.0.0.1 não vale para quem vem de fora: tudo pede senha. A máquina tem ufw ativo,
+  e porta publicada pelo Docker rootless passa por ele, ao contrário do Docker com root: porta nova
+  dá timeout de fora até alguém com sudo liberar, como
+  `ufw allow in on wg0 from 10.10.0.0/24 to 10.10.0.50 port 5432 proto tcp` em 19/11. O Postgres tem
   `stop_grace_period: 2m`: com `checkpoint_timeout` de 30 min, os 10 s padrão acabavam em SIGKILL.
 - Tudo do banco fica no NVMe. Testado em 19/11: a tabela `pages` num tablespace no HD (índices no
   NVMe) fez cada busca BM25 levar minutos, porque o scan lê milhares de blocos das linhas e do TOAST,
