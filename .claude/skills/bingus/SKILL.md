@@ -182,7 +182,7 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
   worker fazia 2 páginas por segundo. Um host recebe no máximo 60 segundos de trabalho por lote.
   Throughput se ajusta em `BINGUS_HOSTS`, não em URLs por host; extração é uma thread só.
 - Um worker satura um núcleo (GIL: HTTP, extração e links no mesmo processo), então se escala em
-  processos. Nesta máquina: 10 workers nativos com 60 hosts em voo, uns 20 páginas novas por segundo
+  processos. Nesta máquina: 12 workers nativos com 60 hosts em voo, uns 20 páginas novas por segundo
   no total. Extração custava 258 ms de CPU por página, 85% no `bare_extraction`; com `fast=True` do
   trafilatura caiu 2,4x, artigos idênticos, e homes de portal viram hubs.
 - Nesta máquina os fetch workers rodam fora do Docker (`systemd/bingus-fetch@.service`, venv em
@@ -190,6 +190,17 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
   (gvisor-tap-vsock) entregava uns 5 MB/s somando todos os containers, contra 60 MB/s do host. O
   venv é instalado sem editable; mudou o código do fetch, rode o `uv sync` do cabeçalho de
   `systemd/bingus.slice` e reinicie as instâncias. As réplicas de fetch do compose ficam em 0.
+- robots.txt e sitemaps baixam com teto de 10 MB (inclusive depois de descompactar) e 20 s por
+  arquivo, e a lista de URLs é cortada antes de normalizar. Sem isso, sitemaps de portal com
+  centenas de MB levavam minutos, a lease vencia no meio, outro worker pegava o host e os maiores
+  sites semeados nunca passavam da primeira página.
+- A data de publicação vem do htmldate sem busca extensiva (`extensive_search=False`,
+  `original_date=True`): 37 ms contra 142 ms por página, e em 13 páginas só uma home perdeu a data.
+- A ingestão de `/fetch/results` usa uma transação curta por host (`in_tx`, que repete só aquele
+  pedaço em deadlock), outra para a frontier, e grava frontier e hosts em ordem; o `next_due` de um
+  host só é escrito quando muda. Uma transação por lote segurava por segundos as linhas de hosts
+  que toda página linka (gov.br e afins): com 12 workers dava deadlock cinco vezes seguidas, o
+  worker guardava o lote e reenviava maior, e os hosts do lote nunca eram liberados.
 - `docker stop` (SIGTERM) faz o worker enviar o que está pronto e devolver os hosts em voo em
   `POST /fetch/release`, com `stop_grace_period` de 30 s. A devolução vem antes do envio, para um
   envio que falha não impedi-la. Sem isso, cada deploy deixava centenas de hosts alugados e o worker
