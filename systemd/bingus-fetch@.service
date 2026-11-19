@@ -1,0 +1,21 @@
+# Fetch worker nativo, fora do Docker: a rede do Docker rootless (gvisor-tap-vsock) entregava uns
+# 5 MB/s somando todos os containers, contra 60 MB/s do host. Várias instâncias:
+#   systemctl --user enable --now bingus-fetch@{1..4}
+# Código instalado em ~/bingus-data/fetch-venv; depois de mudar o fetch, rode de novo o uv sync do
+# cabeçalho de systemd/bingus.slice e reinicie as instâncias.
+[Unit]
+Description=Bingus: fetch worker %i
+
+[Service]
+Slice=bingus.slice
+WorkingDirectory=%h/bingus-data
+EnvironmentFile=%h/.config/bingus/fetch.env
+Environment=BINGUS_NAME=nativo-%i PYTHONUNBUFFERED=1
+ExecStart=%h/bingus-data/fetch-venv/bin/bingus-fetch
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+MemoryMax=2G
+
+[Install]
+WantedBy=default.target

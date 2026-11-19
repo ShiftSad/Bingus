@@ -7,10 +7,10 @@ gb=$(docker compose exec -T postgres du -s -BG /var/lib/postgresql | cut -dG -f1
 [ -n "$gb" ] || exit 1
 if [ "$gb" -ge "$LIMITE_GB" ]; then
     echo "banco com $gb GB, limite $LIMITE_GB: pausando a coleta"
-    docker compose stop fetch && touch "$FLAG"
+    systemctl --user stop 'bingus-fetch@*' && touch "$FLAG"
 elif [ -e "$FLAG" ] && [ "$gb" -lt $((LIMITE_GB - 5)) ]; then
     echo "banco com $gb GB: retomando a coleta"
-    docker compose --profile workers start fetch && rm -f "$FLAG"
+    systemctl --user start bingus-fetch@1 bingus-fetch@2 bingus-fetch@3 bingus-fetch@4 && rm -f "$FLAG"
 else
     echo "banco com $gb GB"
 fi
