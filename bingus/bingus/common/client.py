@@ -22,7 +22,7 @@ class Api:
     async def post_json(self, path: str, data: object) -> Any:
         r = await self.http.post(
             path,
-            content=gzip.compress(json.dumps(data).encode()),
+            content=gzip.compress(json.dumps(data).encode(), compresslevel=1),
             headers={"Content-Type": "application/json", "Content-Encoding": "gzip"},
         )
         r.raise_for_status()

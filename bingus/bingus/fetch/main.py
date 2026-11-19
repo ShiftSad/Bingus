@@ -68,7 +68,8 @@ class Worker:
                 log.info("no work, waiting")
                 await asyncio.sleep(30)
                 continue
-            log.info("%d hosts leased, %d in flight", len(batch["hosts"]), len(self.tasks))
+            names = [h["host"] for h in batch["hosts"]]
+            log.info("%d hosts leased, %d in flight: %s", len(names), len(self.tasks), names[:3])
             for h in batch["hosts"]:
                 task = asyncio.create_task(self.crawl(h))
                 self.tasks.add(task)
@@ -76,9 +77,14 @@ class Worker:
 
     async def crawl(self, h: dict[str, Any]) -> None:
         self.flying.add(h["host"])
+        started = asyncio.get_running_loop().time()
         try:
-            self.done.append(await self.crawl_host(h))
+            result = await self.crawl_host(h)
+            self.done.append(result)
             self.flying.discard(h["host"])
+            took = asyncio.get_running_loop().time() - started
+            if took > 90:
+                log.info("slow host %s: %.0fs, %d pages", h["host"], took, len(result["pages"]))
         except asyncio.CancelledError:
             raise  # continua em flying: o desligamento devolve o host
         except Exception as e:

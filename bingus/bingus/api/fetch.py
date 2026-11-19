@@ -3,6 +3,8 @@ import datetime as dt
 import logging
 import time
 from collections import Counter
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
@@ -192,8 +194,12 @@ WITH ins AS (
       AND NOT EXISTS (SELECT 1 FROM pages p WHERE p.url_hash = t.uh)
     ON CONFLICT DO NOTHING
     RETURNING host
-), due AS (
-    UPDATE hosts SET next_due = least(next_due, {COOLDOWN}) WHERE host IN (SELECT host FROM ins)
+), due AS (  -- só os que mudam, travados em ordem: hosts populares eram fonte de deadlock
+    SELECT host FROM hosts
+    WHERE host IN (SELECT host FROM ins) AND next_due > {COOLDOWN}
+    ORDER BY host FOR UPDATE
+), moved AS (
+    UPDATE hosts h SET next_due = {COOLDOWN} FROM due WHERE h.host = due.host
 )
 SELECT count(*) FROM ins
 """
@@ -232,36 +238,62 @@ async def batch(hosts: int = 10, per_host: int = 10, name: str = Depends(worker)
 
 @router.post("/results")
 async def results(body: FetchResults, name: str = Depends(worker)):
-    # Vários workers e o seed disputam as mesmas linhas de hosts: deadlock repete o lote.
-    for attempt in range(5):
-        try:
-            await save_results(body, name)
-            return {"ok": True}
-        except asyncpg.DeadlockDetectedError:
-            log.warning("deadlock, retrying results from %s (%d)", name, attempt + 1)
-            await asyncio.sleep(1 + attempt)
-    raise HTTPException(503, "Deadlock persistente, reenvie.")
+    """Ingest a worker's results: one short transaction per host, then the frontier.
 
-
-async def save_results(body: FetchResults, name: str) -> None:
+    One transaction for the whole batch held locks for seconds over hosts every page links to;
+    with 12 workers it deadlocked five times in a row and the batches snowballed.
+    """
     started = time.monotonic()
     outcomes: Counter[str] = Counter()
     queued = 0
     links: Links = {}
     for url in body.urls:
         add_link(links, url, 0)
-    async with db.pool().acquire() as conn, conn.transaction():
+    by_host: dict[str, list[PageResult]] = {}
+    for page in body.pages:
+        by_host.setdefault(host_of(page.url), []).append(page)
+    async with db.pool().acquire() as conn:
         for host, info in sorted(body.hosts.items()):
-            await conn.execute(SAVE_HOST, host, info.robots, info.crawl_delay, info.sitemaps)
-        for page in sorted(body.pages, key=lambda p: host_of(p.url)):
-            outcome, n = await ingest(conn, page, links)
-            outcomes[outcome] += 1
+            await in_tx(conn, save_host, host, info)
+        for host in sorted(by_host):
+            o, n, found = await in_tx(conn, ingest_pages, by_host[host])
+            outcomes += o
             queued += n
-        added = await add_frontier(conn, links)
-        for host in sorted({host_of(p.url) for p in body.pages} | set(body.hosts)):
+            for h, link in found.items():
+                links.setdefault(h, link)
+        added = await in_tx(conn, add_frontier, links)
+        for host in sorted(set(by_host) | set(body.hosts)):
             await conn.execute(RELEASE_HOST, host)
         ms = int((time.monotonic() - started) * 1000)
         await metrics.record_batch(conn, name, ms, outcomes, added, queued)
+    return {"ok": True}
+
+
+async def in_tx[T](conn: Conn, fn: Callable[..., Awaitable[T]], *args: Any) -> T:
+    """Run fn in its own transaction. A deadlock repeats only this piece."""
+    for attempt in range(5):
+        try:
+            async with conn.transaction():
+                return await fn(conn, *args)
+        except asyncpg.DeadlockDetectedError:
+            log.warning("deadlock in %s, retrying (%d)", fn.__name__, attempt + 1)
+            await asyncio.sleep(0.2 * (attempt + 1))
+    raise HTTPException(503, "Deadlock persistente, reenvie.")
+
+
+async def save_host(conn: Conn, host: str, info: HostResult) -> None:
+    await conn.execute(SAVE_HOST, host, info.robots, info.crawl_delay, info.sitemaps)
+
+
+async def ingest_pages(conn: Conn, pages: list[PageResult]) -> tuple[Counter[str], int, Links]:
+    outcomes: Counter[str] = Counter()
+    queued = 0
+    links: Links = {}
+    for page in pages:
+        outcome, n = await ingest(conn, page, links)
+        outcomes[outcome] += 1
+        queued += n
+    return outcomes, queued, links
 
 
 @router.post("/release")
@@ -408,9 +440,11 @@ def add_link(links: Links, url: str, depth: int) -> None:
 
 
 async def add_frontier(conn: Conn, links: Links) -> int:
+    """Sorted inserts: two transactions inserting the same rows in different orders deadlock."""
     if not links:
         return 0
-    hashes = list(links)
-    urls, hosts, depths = (list(col) for col in zip(*links.values(), strict=True))
-    await conn.execute(INSERT_HOSTS, hosts)
+    rows = sorted(links.items())
+    hashes = [h for h, _ in rows]
+    urls, hosts, depths = (list(col) for col in zip(*(v for _, v in rows), strict=True))
+    await conn.execute(INSERT_HOSTS, sorted(set(hosts)))
     return await conn.fetchval(ADD_FRONTIER, hashes, urls, hosts, depths) or 0
