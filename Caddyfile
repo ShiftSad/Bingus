@@ -1,17 +1,19 @@
-# Borda pública, no VPS. O dedicado só escuta na WireGuard: API em 10.10.0.2:2026 e
-# frontend em 10.10.0.2:2027 (BINGUS_API_BIND e BINGUS_WEB_BIND na .env do dedicado).
-api.shiftsad.dev {
+# Borda pública, no VPS da WireGuard (10.10.0.1). O Bingus roda na máquina 10.10.0.50 e só escuta
+# na WireGuard: API (busca, MCP em /mcp, formato SearXNG em /search?format=json) em 2026 e o
+# frontend em 2027. Antes de publicar: api.bingus.sh em BINGUS_MCP_HOSTS (senão o MCP responde 421),
+# VITE_API_URL=https://api.bingus.sh no build do frontend e, se quiser fechar, BINGUS_SEARCH_KEYS.
+api.bingus.sh {
     encode gzip
-    reverse_proxy 10.10.0.2:2026
+    reverse_proxy 10.10.0.50:2026
 
     tls {
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     }
 }
 
-bingus.shiftsad.dev {
+bingus.sh {
     encode gzip
-    reverse_proxy 10.10.0.2:2027
+    reverse_proxy 10.10.0.50:2027
 
     tls {
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}

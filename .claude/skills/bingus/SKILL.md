@@ -252,6 +252,34 @@ frontend e o MCP chamam. Híbrida:
   estourar. Lê `X-Forwarded-For` porque o Caddy fica na frente. Constantes em `search.py`.
 - CORS liberado para GET, porque o frontend chama a API direto do browser.
 
+## Foco nerd/tech
+
+Desde 2026-11-19 o foco é conteúdo nerd/tech: IA (português; inglês aceito para fontes como
+Hugging Face), hardware e peças de computador, dev, Linux, games, ciência. Conteúdo geral continua,
+com menos prioridade. O MCP é para um servidor de amigos nerds: o nicho bom primeiro.
+
+- `hosts.priority` ordena a lease de hosts (antes de `seeded`) e a fila do embed
+  (`embed_priority` soma 100 por ponto, lido da tabela `hosts`, por isso a função é STABLE).
+  O cooldown entre lotes é dividido por `1 + priority`.
+- `POST /fetch/seed` aceita `priority`. Os sites do dono têm 10: radardehardware.com.br, que
+  redireciona para radargpu.com.br, e os irmãos radarcpu, radarram, radarautos (HTML estático,
+  robots libera tudo menos `/comparar/livre/`, sitemap em `/sitemap-index.xml`).
+- Crawl focado simples: um host ainda nunca visitado, linkado de um host com prioridade p, nasce
+  com p - 2 (`PRIORITY_DECAY`). Só nesses o insert usa DO UPDATE, que trava a linha; para os demais,
+  DO NOTHING, porque hosts populares eram fonte de deadlock.
+
+## API pública
+
+Ainda sem IP público: tudo pronto para quando o dono quiser liberar pelo Caddy do VPS
+(`Caddyfile` da raiz já aponta para 10.10.0.50).
+
+- `GET /search?q=...&format=json&pageno=N` responde no formato JSON do SearXNG (`results` com `url`,
+  `title`, `content`, `engine`), que Open WebUI, LangChain e afins já consomem: basta apontar para o
+  Bingus como se fosse um SearXNG.
+- `BINGUS_SEARCH_KEYS=chave1,chave2` fecha `/search`, `/page` e `/mcp` com `Authorization: Bearer`
+  ou `?key=`. Vazio, aberto: o padrão enquanto só a WireGuard alcança.
+- O host público precisa estar em `BINGUS_MCP_HOSTS`, senão o MCP responde 421.
+
 ## MCP
 
 O produto. `bingus/api/tools.py`, SDK oficial `mcp` 2.x (`MCPServer`), montado na própria API em
@@ -263,6 +291,8 @@ O produto. `bingus/api/tools.py`, SDK oficial `mcp` 2.x (`MCPServer`), montado n
   extrator do crawler (um request em nome de uma pessoa, como um navegador) e põe a URL na frontier.
   Com `question` e LLM configurada, responde sobre a página. Até 20 mil caracteres.
 
+Sem estado (`stateless_http=True`): sem sessão em memória, qualquer processo atende qualquer
+request, o que permite vários workers do uvicorn ou réplicas atrás do Caddy.
 O SDK recusa com 421 qualquer `Host` fora de `BINGUS_MCP_HOSTS` (padrão `localhost,127.0.0.1`),
 proteção contra DNS rebinding. Nesta máquina: `localhost,127.0.0.1,10.10.0.50`. Para usar no Claude
 Code: `claude mcp add --transport http bingus http://10.10.0.50:2026/mcp`.
