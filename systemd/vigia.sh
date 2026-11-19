@@ -10,7 +10,8 @@ if [ "$gb" -ge "$LIMITE_GB" ]; then
     systemctl --user stop 'bingus-fetch@*' && touch "$FLAG"
 elif [ -e "$FLAG" ] && [ "$gb" -lt $((LIMITE_GB - 5)) ]; then
     echo "banco com $gb GB: retomando a coleta"
-    systemctl --user start bingus-fetch@1 bingus-fetch@2 bingus-fetch@3 bingus-fetch@4 && rm -f "$FLAG"
+    workers=$(ls "$HOME/.config/systemd/user/default.target.wants" | grep '^bingus-fetch@')
+    systemctl --user start $workers && rm -f "$FLAG"
 else
     echo "banco com $gb GB"
 fi
