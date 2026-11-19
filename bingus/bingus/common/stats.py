@@ -15,10 +15,31 @@ log = logging.getLogger(__name__)
 INSTANCE = os.environ.get("BINGUS_NAME", socket.gethostname())
 
 
+GPU_QUERY = "utilization.gpu,memory.used,power.draw"
+
+
+async def gpu_sample() -> dict[str, float]:
+    """Use, VRAM and power of the first GPU from nvidia-smi; empty when there is none."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "nvidia-smi",
+            f"--query-gpu={GPU_QUERY}",
+            "--format=csv,noheader,nounits",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), 5)
+        util, mem, watts = (float(v) for v in out.decode().split("\n")[0].split(","))
+    except Exception:
+        return {}
+    return {"gpu": util, "gpu_mem": int(mem * 2**20), "gpu_watts": watts}
+
+
 class Stats:
     """Counters for the current sample window, pushed to the API every few seconds."""
 
-    def __init__(self) -> None:
+    def __init__(self, gpu: bool = False) -> None:
+        self.gpu = gpu  # só o embed: os fetch workers nativos veriam a GPU da máquina
         self.requests = 0
         self.bytes = 0
         self.pages = 0
@@ -41,6 +62,7 @@ class Stats:
                     "pages": self.pages,
                     "errors": dict(self.errors),
                     "cpu": (now - cpu) / every,
+                    **(await gpu_sample() if self.gpu else {}),
                 }
             )
             self.requests = self.bytes = self.pages = 0

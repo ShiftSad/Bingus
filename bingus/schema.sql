@@ -106,6 +106,9 @@ CREATE TABLE worker_samples (
     pages    integer NOT NULL,       -- resultados prontos no período
     errors   jsonb NOT NULL,         -- {"timeout": 2, "http_5xx": 1}
     cpu      real NOT NULL,          -- núcleos usados pelo processo
+    gpu       real,                  -- só o embed: % de uso da GPU, VRAM em bytes, watts
+    gpu_mem   bigint,
+    gpu_watts real,
     PRIMARY KEY (worker, at)
 );
 

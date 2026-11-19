@@ -9,6 +9,9 @@ services:
     cgroup_parent: bingus.slice
     mem_limit: 20g
     shm_size: 2g
+    # Com checkpoint_timeout de 30 min o checkpoint de desligamento passa dos 10 s padrão; o SIGKILL
+    # forçava recuperação do WAL inteiro na subida.
+    stop_grace_period: 2m
     command:
       - postgres
       - -c

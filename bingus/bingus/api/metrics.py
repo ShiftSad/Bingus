@@ -20,7 +20,13 @@ RETENTION = dt.timedelta(days=90)
 # Prometheus entende. Somar a tabela batches não serve: a limpeza dos 90 dias faria o total cair,
 # e o Prometheus leria a queda como restart, com um pico do tamanho do total.
 totals: Counter[tuple[str, str]] = Counter()  # (métrica, rótulos) -> soma
-cpu: dict[str, tuple[float, float]] = {}  # worker -> (hora da última amostra, núcleos)
+latest: dict[str, tuple[float, "Sample"]] = {}  # worker -> (hora, última amostra)
+GAUGES = {  # métrica -> campo da última amostra
+    "bingus_worker_cpu_cores": "cpu",
+    "bingus_worker_gpu_percent": "gpu",
+    "bingus_worker_gpu_memory_bytes": "gpu_mem",
+    "bingus_worker_gpu_watts": "gpu_watts",
+}
 
 HELP = {
     "bingus_pages": ("gauge", "Páginas buscadas, inclusive falhas e outros idiomas"),
@@ -44,6 +50,9 @@ HELP = {
     "bingus_worker_pages_total": ("counter", "Resultados prontos no worker"),
     "bingus_worker_errors_total": ("counter", "Erros do worker por tipo"),
     "bingus_worker_cpu_cores": ("gauge", "Núcleos usados pelo worker na última amostra"),
+    "bingus_worker_gpu_percent": ("gauge", "Uso da GPU do embed na última amostra"),
+    "bingus_worker_gpu_memory_bytes": ("gauge", "VRAM em uso na última amostra"),
+    "bingus_worker_gpu_watts": ("gauge", "Potência da GPU na última amostra"),
 }
 
 # n_live_tup acompanha inserts e deletes na hora, reltuples só muda no ANALYZE. Os índices
@@ -81,6 +90,9 @@ class Sample(BaseModel):
     pages: int = 0
     errors: dict[str, int] = {}
     cpu: float = 0
+    gpu: float | None = None  # só o embed manda: % de uso, bytes de VRAM, watts
+    gpu_mem: int | None = None
+    gpu_watts: float | None = None
 
 
 class Samples(BaseModel):
@@ -89,8 +101,9 @@ class Samples(BaseModel):
 
 
 SAVE_SAMPLE = """
-INSERT INTO worker_samples (worker, at, requests, bytes, pages, errors, cpu)
-VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7) ON CONFLICT DO NOTHING
+INSERT INTO worker_samples
+    (worker, at, requests, bytes, pages, errors, cpu, gpu, gpu_mem, gpu_watts)
+VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10) ON CONFLICT DO NOTHING
 """
 
 SAVE_BATCH = """
@@ -121,7 +134,18 @@ async def ingest(body: Samples, name: str = Depends(worker)):
     if body.instance:
         name = f"{name}/{body.instance}"
     rows = [
-        (name, s.at, s.requests, s.bytes, s.pages, json.dumps(s.errors), s.cpu)
+        (
+            name,
+            s.at,
+            s.requests,
+            s.bytes,
+            s.pages,
+            json.dumps(s.errors),
+            s.cpu,
+            s.gpu,
+            s.gpu_mem,
+            s.gpu_watts,
+        )
         for s in body.samples
     ]
     await db.pool().executemany(SAVE_SAMPLE, rows)
@@ -132,7 +156,7 @@ async def ingest(body: Samples, name: str = Depends(worker)):
         for kind, n in s.errors.items():
             count("bingus_worker_errors_total", n, worker=name, kind=kind)
     if body.samples:
-        cpu[name] = (time.time(), body.samples[-1].cpu)
+        latest[name] = (time.time(), body.samples[-1])
     return {"ok": True}
 
 
@@ -147,9 +171,11 @@ async def prometheus() -> PlainTextResponse:
     series += [(metric, lbl, n) for (metric, lbl), n in totals.items()]
     now = time.time()
     series += [
-        ("bingus_worker_cpu_cores", labels(worker=w), cores)
-        for w, (at, cores) in cpu.items()
+        (metric, labels(worker=w), value)
+        for w, (at, sample) in latest.items()
         if now - at < 120  # worker parado some do gráfico em vez de ficar no último valor
+        for metric, field in GAUGES.items()
+        if (value := getattr(sample, field)) is not None
     ]
     out, last = [], ""
     for metric, lbl, value in sorted(series):

@@ -415,7 +415,10 @@ com retenção de 90 dias, limpas pela própria API:
   Vai junto `instance`, o hostname ou `BINGUS_NAME`, e a API grava `worker` como `fetch/nome`:
   várias máquinas com a mesma chave viram séries separadas.
   Cada amostra traz requests, bytes baixados, páginas prontas, erros por tipo e CPU do processo
-  no período. Workers não abrem porta nenhuma.
+  no período. Workers não abrem porta nenhuma. O embed manda também `gpu` (% de uso), `gpu_mem`
+  (bytes de VRAM) e `gpu_watts`, lidos do `nvidia-smi` no momento da amostra (`Stats(gpu=True)`);
+  nos fetch workers ficam nulos, senão os nativos reportariam a GPU da máquina. O `/metrics`
+  repete os três como `bingus_worker_gpu_*`.
 - `batches`: a API grava uma linha por resultado ingerido, com contagem por desfecho, URLs
   novas na frontier, chunks enfileirados e tempo de ingestão. É daqui que sai taxa de sucesso.
 - `api_samples`: estado geral a cada minuto, com estimativas do planner para as tabelas grandes.
@@ -430,6 +433,16 @@ soma pelo `$__interval_ms`. Dois índices existem só para ele: `chunks_embedded
 rejeitadas por idioma, que ficam com `lang` e sem `content_hash`.
 Ao mexer, valide cada query no psql trocando `$__timeGroupAlias` por `date_trunc` e
 `$__timeFilter` por um filtro de data.
+
+O Grafana do usuário é o 13.1, com dashboards v2 (`dashboard.grafana.app/v2`). O dele está em
+`grafana/bingus-v2.json`, mesmo uid, para importar por cima: o `bingus.json` com a correção do id
+do plugin, mais páginas com texto, cobertura do embedding, banco, sites com texto e fatia nerd/tech
+no topo, uma linha Recursos (GPU pelo `worker_samples` e máquina pelo node exporter, numa segunda
+variável `PROM`), sites ordenados por `pt_count` (o `page_count` conta falhas: hardmob tinha 19 mil
+visitadas e 2 mil com texto) e a família Radar. Contagens grandes vêm de estimativas do ANALYZE, e
+total e parte saem do mesmo `reltuples`: misturar com `n_live_tup`, que é ao vivo, superestimou os
+chunks com vetor em 50%. Validado num Grafana 13.1.0 descartável: importação pela API v2 e todas as
+consultas por `/api/ds/query`, que expande as macros de verdade.
 
 ### Prometheus
 
@@ -474,8 +487,11 @@ Na máquina compartilhada:
   `BINGUS_HF_CACHE=/home/sadness/.cache/bingus-hf`, `BINGUS_DATA=/mnt/hdd/bingus` (vira `/data` na
   API), `BINGUS_FETCH_REPLICAS=0` (workers nativos, ver Protocolo), `BINGUS_MCP_HOSTS`,
   `BINGUS_METRICS_KEY` (ver Prometheus, em Métricas), binds em
-  `10.10.0.50` portas 2026 (API), 2027 (web) e 2028 (Grafana), Postgres em `127.0.0.1:5432`. A porta
-  8080 já é usada por outro serviço da máquina.
+  `10.10.0.50` portas 2026 (API), 2027 (web), 2028 (Grafana) e 5432 (Postgres, para o Grafana do
+  usuário, como era no dedicado). A porta 8080 já é usada por outro serviço da máquina. O Docker
+  rootless entrega as conexões da porta publicada vindas de 172.19.0.1, então o `trust` do
+  pg_hba para 127.0.0.1 não vale para quem vem de fora: tudo pede senha. O Postgres tem
+  `stop_grace_period: 2m`: com `checkpoint_timeout` de 30 min, os 10 s padrão acabavam em SIGKILL.
 - Grafana no compose (`grafana/provisioning`): datasource com o usuário `grafana` só de leitura,
   dashboard `grafana/bingus.json` como home, anônimo como Viewer porque só a WireGuard alcança.
   O dashboard pedia o plugin `grafana-postgres-datasource`; o id real é `grafana-postgresql-datasource`.

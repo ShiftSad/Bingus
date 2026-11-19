@@ -96,7 +96,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     api = Api(os.environ["BINGUS_API_URL"], os.environ["BINGUS_API_KEY"])
-    stats = Stats()
+    stats = Stats(gpu=True)
     emb = Embedder()
     server = uvicorn.Server(
         uvicorn.Config(query_app(emb), host="0.0.0.0", port=PORT, log_level="warning")
