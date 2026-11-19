@@ -1,9 +1,9 @@
 import asyncio
-import gzip
 import logging
 import os
 import re
 import signal
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from urllib.robotparser import RobotFileParser
@@ -28,6 +28,8 @@ MAX_SITEMAP_URLS = 2000
 ROBOTS_BLOCKED = 999  # status inventado: a API marca a página como morta
 MAX_PENDING = 1000  # hosts prontos guardados enquanto a API não responde
 HOST_BUDGET = 60  # segundos de relógio por host em cada lote, robots e sitemaps inclusos
+SMALL_BYTES = 10 * 1024 * 1024  # robots e sitemaps: o resto do arquivo é ignorado
+SMALL_TIMEOUT = 20  # segundos por robots ou sitemap, download inteiro
 LOC = re.compile(r"<loc>\s*(.*?)\s*</loc>", re.I | re.S)
 # lxml em várias threads ao mesmo tempo dá segfault. Uma thread só para extrair.
 EXTRACT = ThreadPoolExecutor(max_workers=1)
@@ -177,18 +179,28 @@ class Worker:
                 found += locs
             if len(found) >= MAX_SITEMAP_URLS:
                 break
+        # Sitemap de portal tem centenas de milhares de URLs: normalizar tudo travava o loop.
+        found = found[: MAX_SITEMAP_URLS * 2]
         return sorted({n for n in map(normalize, found) if n})[:MAX_SITEMAP_URLS]
 
     async def fetch_bytes(self, url: str) -> tuple[bytes, int]:
-        """Small helper for robots and sitemaps. Returns (body, status); status 0 on error."""
+        """Small helper for robots and sitemaps. Returns (body, status); status 0 on error.
+
+        Capped in size and time: a portal sitemap of hundreds of MB took minutes, the lease
+        expired mid-download, another worker took the host and the site never got past page 1.
+        """
         try:
-            r = await self.http.get(url)
-            self.stats.requests += 1
-            self.stats.bytes += len(r.content)
-            body = r.content
+            async with asyncio.timeout(SMALL_TIMEOUT), self.http.stream("GET", url) as r:
+                self.stats.requests += 1
+                body = bytearray()
+                async for chunk in r.aiter_bytes():
+                    body += chunk
+                    if len(body) > SMALL_BYTES:
+                        break
+            self.stats.bytes += len(body)
             if body[:2] == b"\x1f\x8b":
-                body = gzip.decompress(body)
-            return body, r.status_code
+                body = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(body, SMALL_BYTES)
+            return bytes(body), r.status_code
         except Exception:
             self.stats.error("other")
             return b"", 0
