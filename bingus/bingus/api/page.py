@@ -63,7 +63,7 @@ async def enqueue(url: str) -> None:
     links = {}
     add_link(links, url, 0)
     async with db.pool().acquire() as conn, conn.transaction():
-        await add_frontier(conn, links)
+        await add_frontier(conn, links, min_priority=0)
 
 
 async def fetch_live(url: str) -> dict[str, Any] | None:

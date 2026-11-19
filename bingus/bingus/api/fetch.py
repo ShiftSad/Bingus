@@ -214,7 +214,7 @@ WITH ins AS (
     SELECT t.uh, t.u, t.h, t.d
     FROM unnest($1::bigint[], $2::text[], $3::text[], $4::smallint[]) AS t(uh, u, h, d)
     JOIN hosts ho ON ho.host = t.h
-    WHERE NOT ho.blocked AND ho.page_count < ho.max_pages
+    WHERE NOT ho.blocked AND ho.page_count < ho.max_pages AND (ho.priority >= $5 OR ho.seeded)
       AND NOT EXISTS (SELECT 1 FROM pages p WHERE p.url_hash = t.uh)
     ON CONFLICT DO NOTHING
     RETURNING host
@@ -345,7 +345,7 @@ async def seed(body: Seed, name: str = Depends(worker)):
         add_link(links, url, 0)
     hosts = list({host for _, host, _ in links.values()})
     async with db.pool().acquire() as conn, conn.transaction():
-        added = await add_frontier(conn, links)
+        added = await add_frontier(conn, links, min_priority=0)
         await conn.execute(  # semeado passa na frente da fila de hosts
             "UPDATE hosts SET seeded = true, langs = coalesce($2, langs),"
             + " priority = greatest(priority, $3) WHERE host = ANY($1)",
@@ -475,11 +475,14 @@ def add_link(links: Links, url: str, depth: int) -> None:
         links.setdefault(url_hash(url), (url, host_of(url), depth))
 
 
-async def add_frontier(conn: Conn, links: Links, priority: int = 0) -> int:
+async def add_frontier(
+    conn: Conn, links: Links, priority: int = 0, min_priority: int = MIN_PRIORITY
+) -> int:
     """Sorted inserts: two transactions inserting the same rows in different orders deadlock.
 
     priority > 0 is inherited by hosts never crawled yet, the lite version of focused crawling:
-    whoever a nerd site links to is probably nerd too.
+    whoever a nerd site links to is probably nerd too. Links to hosts below min_priority, which
+    the lease never serves, stay out: they piled up 5.6 million dead URLs. Seeds pass 0.
     """
     if not links:
         return 0
@@ -490,4 +493,4 @@ async def add_frontier(conn: Conn, links: Links, priority: int = 0) -> int:
         await conn.execute(INSERT_HOSTS_PRIORITY, sorted(set(hosts)), priority)
     else:
         await conn.execute(INSERT_HOSTS, sorted(set(hosts)))
-    return await conn.fetchval(ADD_FRONTIER, hashes, urls, hosts, depths) or 0
+    return await conn.fetchval(ADD_FRONTIER, hashes, urls, hosts, depths, min_priority) or 0

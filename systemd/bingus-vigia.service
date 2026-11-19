@@ -5,5 +5,7 @@ Description=Bingus: vigia do disco
 Type=oneshot
 Slice=bingus.slice
 WorkingDirectory=%h/Bingus
-Environment=LIMITE_GB=90
+# Tudo do Bingus cabe em 100 GB de NVMe: ~19 GB fora do banco (imagens, modelo, código) e ~9 GB
+# de vetores ainda por vir na fila do embed quando a coleta pausa. Ver a skill, Infra.
+Environment=LIMITE_GB=68
 ExecStart=/bin/sh %h/Bingus/systemd/vigia.sh

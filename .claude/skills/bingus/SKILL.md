@@ -198,7 +198,9 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
   enfileirava 236 chunks/s, ocupava 71% da CPU da máquina e a fila do embed só crescia; cada worker
   gera uns 20 chunks/s. Desde 19/11 a coleta é focada:
   `BINGUS_MIN_PRIORITY=4` faz a lease entregar só hosts com prioridade 4 ou mais, ou semeados à mão
-  (`fetch.py`, `MIN_PRIORITY`). Medido com o filtro: 99,8% das páginas de hosts com prioridade 6,
+  (`fetch.py`, `MIN_PRIORITY`). O mesmo filtro vale para a frontier: link para host abaixo do corte
+  não entra (`add_frontier`, `min_priority`; seed e `/page` passam 0), senão acumulava URL que
+  nunca seria buscada, 5,6 milhões apagados em 19/11. Medido com o filtro: 99,8% das páginas de hosts com prioridade 6,
   ~210 páginas/s e falha de 14%. Ver Referências. Antes, com 12 e 60 hosts em voo, uns 20 páginas novas por segundo
   no total. Extração custava 258 ms de CPU por página, 85% no `bare_extraction`; com `fast=True` do
   trafilatura caiu 2,4x, artigos idênticos, e homes de portal viram hubs.
@@ -523,8 +525,13 @@ Na máquina compartilhada:
   Os limites somam mais que 32 GB de propósito: o slice é o teto real, eles só impedem um serviço de
   engolir os outros. Testado: estourar o slice mata só o processo de dentro.
 - `systemd/` tem o slice e dois timers do usuário: `bingus-diario` (09:10 UTC: rank, reindex do BM25
-  e vacuum) e `bingus-vigia` (a cada 10 min: pausa os fetch workers com o banco em 90 GB e retoma só o
-  que ele pausou). Instalação no cabeçalho de `systemd/bingus.slice`. Depende do linger do usuário,
+  e vacuum) e `bingus-vigia` (a cada 10 min: pausa os fetch workers com o banco em 68 GB e retoma só o
+  que ele pausou). Os 68 saem do teto de 100 GB de NVMe para tudo do Bingus: ~19 GB fora do banco
+  (imagens ~15, modelo 2,3, código e caches) e ~9 GB de vetores que a fila do embed ainda grava
+  depois da pausa (~1,1 KB por chunk). O cache de construção do Docker chegou a 36 GB num dia de
+  rebuilds: depois de reconstruir imagem, `docker builder prune -af` e `docker image prune -f`.
+  Do Docker deste usuário, `gpu_burn` e `mariadb` (geopolitico-db, craftsapiens-db) não são do
+  Bingus: não mexer. Instalação no cabeçalho de `systemd/bingus.slice`. Depende do linger do usuário,
   ativado, senão tudo morre quando as sessões fecham.
 - Boot: Docker rootless, os fetch workers habilitados e os timers sobem com o systemd do usuário, e os
   containers têm `restart: unless-stopped`. Só que o Docker restaura os containers antes da WireGuard
