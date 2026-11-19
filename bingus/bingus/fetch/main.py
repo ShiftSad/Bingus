@@ -106,20 +106,25 @@ class Worker:
         log.info("%d hosts, %d pages, %d sitemap urls", len(results), len(pages), len(urls))
 
     async def shutdown(self) -> None:
-        """docker stop: envia o que está pronto e devolve os hosts em voo, dentro do prazo."""
+        """docker stop: devolve os hosts em voo e envia o que está pronto, dentro do prazo."""
         for task in list(self.tasks):
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
+        try:  # primeiro a devolução, que é rápida; um envio que falha não pode impedi-la
+            await self.api.post_json("/fetch/release", {"hosts": sorted(self.flying)})
+            log.info("stopped, %d hosts released", len(self.flying))
+        except Exception as e:
+            log.warning("release failed: %s", e)
         try:
             if self.done:
                 await self.send(self.done)
-            if self.flying:
-                await self.api.post_json("/fetch/release", {"hosts": sorted(self.flying)})
-            log.info("stopped, %d hosts released", len(self.flying))
         except Exception as e:
-            log.warning("shutdown failed: %s", e)
+            log.warning("last results lost: %s", e)
 
     async def crawl_host(self, h: dict[str, Any]) -> dict[str, Any]:
+        # A API dimensiona o lote pelo crawl_delay, sem contar o tempo de cada download: um host
+        # lento segurava o slot por minutos. O que não couber fica na fila para o próximo lote.
+        deadline = asyncio.get_running_loop().time() + HOST_BUDGET
         host, delay, robots = h["host"], h["crawl_delay"], h["robots"]
         info, urls = None, []
         if robots is None:
@@ -130,12 +135,9 @@ class Worker:
         else:
             rules = parse_robots(robots)
         if h["want_sitemaps"]:
-            urls = await self.sitemaps(rules.site_maps() or [], delay)
+            urls = await self.sitemaps(rules.site_maps() or [], delay, deadline)
             info = {"crawl_delay": delay, **(info or {}), "sitemaps": True}
         pages = []
-        # A API dimensiona o lote pelo crawl_delay, sem contar o tempo de cada download: um host
-        # lento segurava o slot por minutos. O que não couber fica na fila para o próximo lote.
-        deadline = asyncio.get_running_loop().time() + HOST_BUDGET
         for u in h["urls"]:
             if asyncio.get_running_loop().time() > deadline:
                 break
@@ -155,14 +157,19 @@ class Worker:
                 break
         return ""
 
-    async def sitemaps(self, sitemaps: list[str], delay: float) -> list[str]:
+    async def sitemaps(self, sitemaps: list[str], delay: float, deadline: float) -> list[str]:
         found: list[str] = []
+        loop = asyncio.get_running_loop()
         for sm in sitemaps[:MAX_SITEMAPS]:
+            if loop.time() > deadline:
+                break
             body, _ = await self.fetch_bytes(sm)
             await asyncio.sleep(delay)
             locs = LOC.findall(body.decode(errors="replace"))
             if b"<sitemapindex" in body:
                 for child in locs[:MAX_SITEMAPS]:
+                    if loop.time() > deadline:
+                        break
                     body, _ = await self.fetch_bytes(child)
                     await asyncio.sleep(delay)
                     found += LOC.findall(body.decode(errors="replace"))

@@ -23,7 +23,10 @@ DEAD_INTERVAL = dt.timedelta(days=90)  # redirects e páginas fora do idioma
 MAX_DEPTH = 5
 MAX_LINKS = 500
 MAX_PER_HOST = 100  # hosts grandes recebem até isso por lote
-HOST_BUDGET = 60  # segundos que um host pode ocupar num lote; o lote espera o mais lento
+HOST_BUDGET = 60  # segundos de relógio que um host ocupa num lote; o worker para ao estourar
+# Orçamento, o download que estava em curso e o próximo envio. Worker que morre perde os hosts por
+# no máximo isso; antes a lease crescia com o crawl_delay e chegava a 50 minutos.
+LEASE_SECONDS = HOST_BUDGET + 120
 MAX_FAILS = 10
 REEMBED_BITS = 3
 ROBOTS_BLOCKED = 999  # status inventado pelo worker: página morre na hora
@@ -93,7 +96,7 @@ WITH picked AS (
     FOR UPDATE SKIP LOCKED
 )
 UPDATE hosts h
-SET leased_until = now() + make_interval(secs => 60 + $2 * greatest(h.crawl_delay, 1))
+SET leased_until = now() + make_interval(secs => $2)
 FROM picked WHERE h.host = picked.host
 RETURNING h.host, h.crawl_delay, h.robots, h.page_count,
     h.page_count < h.max_pages AS accepts_new,
@@ -204,7 +207,7 @@ async def batch(hosts: int = 10, per_host: int = 10, name: str = Depends(worker)
     """
     out = []
     async with db.pool().acquire() as conn, conn.transaction():
-        for h in await conn.fetch(LEASE_HOSTS, hosts, MAX_PER_HOST * 3.0):
+        for h in await conn.fetch(LEASE_HOSTS, hosts, LEASE_SECONDS):
             n = min(MAX_PER_HOST, max(per_host, int(h["page_count"] ** 0.5)))
             n = max(1, min(n, int(HOST_BUDGET / max(h["crawl_delay"], 1))))
             urls = []
