@@ -535,6 +535,16 @@ Na máquina compartilhada:
   recuperou sozinho, a API reiniciou 13 vezes até ele aceitar conexões, e às 17:33 a ingestão já
   tinha voltado; uns 12 minutos fora no total. O `docker logs` do container restaurado não mostra
   as linhas depois do boot; o banco (`batches`, `chunks.embedded_at`) é a prova de que voltou.
+  O log inteiro está no arquivo de `docker inspect -f '{{.LogPath}}'`.
+- Reboot com `sudo reboot` também mata o Postgres: o Ubuntu traz
+  `/usr/lib/systemd/system/user@.service.d/timeout.conf` com `TimeoutStopSec=5`, e o systemd para os
+  scopes dos containers direto, sem o `stop_grace_period`. O Postgres morreu 1 s depois do pedido de
+  desligamento; na subida, 169 s de redo e 264 s do checkpoint de fim de recuperação (fsync no HD),
+  primeira página 8 min depois do boot. Correções: `checkpoint_timeout=5min` e `max_wal_size=2GB`
+  (pouco WAL para refazer), a API espera o banco em `db.connect` em vez de cair no backoff de
+  restart do Docker, e, com sudo, `user@1001.service.d/zz-bingus.conf` com `TimeoutStopSec=180`.
+- `gpu-unlock` 2.0.0 (dkms e firmware) instalado pelo usuário em 19/11 18:05 UTC. Embed de 31-34
+  para ~42 chunks/s na 3060 Ti nos primeiros minutos, longe dos 2x prometidos.
 - `.env` daqui, além do que vem abaixo: `BINGUS_PG_DATA=/home/sadness/bingus-data/pg`,
   `BINGUS_HF_CACHE=/home/sadness/.cache/bingus-hf`, `BINGUS_DATA=/mnt/hdd/bingus` (vira `/data` na
   API), `BINGUS_FETCH_REPLICAS=0` (workers nativos, ver Protocolo), `BINGUS_MCP_HOSTS`,

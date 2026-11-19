@@ -9,8 +9,8 @@ services:
     cgroup_parent: bingus.slice
     mem_limit: 20g
     shm_size: 2g
-    # Com checkpoint_timeout de 30 min o checkpoint de desligamento passa dos 10 s padrão; o SIGKILL
-    # forçava recuperação do WAL inteiro na subida.
+    # O checkpoint de desligamento passa dos 10 s padrão, e o SIGKILL força recuperação do WAL na
+    # subida. No reboot da máquina quem manda é o TimeoutStopSec do user@.service, ver a skill.
     stop_grace_period: 2m
     command:
       - postgres
@@ -31,9 +31,11 @@ services:
       - -c
       - work_mem=64MB
       - -c
-      - max_wal_size=4GB  # 16 GB deixava 16 GB de WAL parados no NVMe
+      # Pouco WAL entre checkpoints: depois de uma queda, com 30 min e 4 GB a subida levou 7 min
+      # (169 s de redo e 264 s do checkpoint de fim de recuperação, quase tudo fsync no HD).
+      - max_wal_size=2GB
       - -c
-      - checkpoint_timeout=30min
+      - checkpoint_timeout=5min
       # Uma queda perde os últimos segundos de ingestão, que o crawler refaz. Nunca corrompe.
       - -c
       - synchronous_commit=off
