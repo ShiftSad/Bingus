@@ -27,6 +27,7 @@ MAX_SITEMAPS = 5
 MAX_SITEMAP_URLS = 2000
 ROBOTS_BLOCKED = 999  # status inventado: a API marca a página como morta
 MAX_PENDING = 1000  # hosts prontos guardados enquanto a API não responde
+HOST_BUDGET = 60  # segundos de relógio por host em cada lote, robots e sitemaps inclusos
 LOC = re.compile(r"<loc>\s*(.*?)\s*</loc>", re.I | re.S)
 # lxml em várias threads ao mesmo tempo dá segfault. Uma thread só para extrair.
 EXTRACT = ThreadPoolExecutor(max_workers=1)
@@ -132,7 +133,12 @@ class Worker:
             urls = await self.sitemaps(rules.site_maps() or [], delay)
             info = {"crawl_delay": delay, **(info or {}), "sitemaps": True}
         pages = []
+        # A API dimensiona o lote pelo crawl_delay, sem contar o tempo de cada download: um host
+        # lento segurava o slot por minutos. O que não couber fica na fila para o próximo lote.
+        deadline = asyncio.get_running_loop().time() + HOST_BUDGET
         for u in h["urls"]:
+            if asyncio.get_running_loop().time() > deadline:
+                break
             if not rules.can_fetch(UA, u["url"]):
                 pages.append({"url": u["url"], "depth": u["depth"], "status": ROBOTS_BLOCKED})
                 continue
