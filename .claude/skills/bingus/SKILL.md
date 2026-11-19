@@ -193,7 +193,10 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
   worker fazia 2 páginas por segundo. Um host recebe no máximo 60 segundos de trabalho por lote.
   Throughput se ajusta em `BINGUS_HOSTS`, não em URLs por host; extração é uma thread só.
 - Um worker satura um núcleo (GIL: HTTP, extração e links no mesmo processo), então se escala em
-  processos. Nesta máquina são 12 workers nativos. Desde 19/11 a coleta é focada:
+  processos. Nesta máquina roda 1 worker nativo com `BINGUS_HOSTS=40` (`~/.config/bingus/fetch.env`):
+  o bastante para enfileirar chunks no ritmo que a GPU vetoriza, ~31 por segundo. Com 12 a coleta
+  enfileirava 236 chunks/s, ocupava 71% da CPU da máquina e a fila do embed só crescia; cada worker
+  gera uns 20 chunks/s. Desde 19/11 a coleta é focada:
   `BINGUS_MIN_PRIORITY=4` faz a lease entregar só hosts com prioridade 4 ou mais, ou semeados à mão
   (`fetch.py`, `MIN_PRIORITY`). Medido com o filtro: 99,8% das páginas de hosts com prioridade 6,
   ~210 páginas/s e falha de 14%. Ver Referências. Antes, com 12 e 60 hosts em voo, uns 20 páginas novas por segundo
@@ -528,6 +531,10 @@ Na máquina compartilhada:
   subir, e porta publicada num IP inexistente impede o container de iniciar (testado: "cannot assign
   requested address"). `bingus.service` roda `systemd/sobe.sh`, que espera os IPs dos `*_BIND` do
   `.env` e faz `compose --profile workers up -d --no-recreate`: só liga o que ficou parado.
+  Testado de verdade em 19/11, com dois cortes de energia (14:21 e 14:24 UTC): o Postgres se
+  recuperou sozinho, a API reiniciou 13 vezes até ele aceitar conexões, e às 17:33 a ingestão já
+  tinha voltado; uns 12 minutos fora no total. O `docker logs` do container restaurado não mostra
+  as linhas depois do boot; o banco (`batches`, `chunks.embedded_at`) é a prova de que voltou.
 - `.env` daqui, além do que vem abaixo: `BINGUS_PG_DATA=/home/sadness/bingus-data/pg`,
   `BINGUS_HF_CACHE=/home/sadness/.cache/bingus-hf`, `BINGUS_DATA=/mnt/hdd/bingus` (vira `/data` na
   API), `BINGUS_FETCH_REPLICAS=0` (workers nativos, ver Protocolo), `BINGUS_MCP_HOSTS`,
