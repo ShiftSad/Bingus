@@ -32,6 +32,8 @@ MAX_PER_HOST = 2  # um site ocupa no máximo isso antes de os outros aparecerem
 # quebra "5060" em dígitos e "custo-benefício" em tokens diferentes de "custo benefício". Vale até
 # uma primeira posição. Medido em 40 buscas nerd: nDCG@10 0,42 -> 0,55 sozinho.
 TITLE_WEIGHT = 1.0
+TITLE_STATS_TTL = 3600
+TITLE_SAMPLE = "SELECT title FROM pages TABLESAMPLE SYSTEM (5) WHERE title IS NOT NULL LIMIT 100000"
 STOPWORDS = set(
     "a o as os um uma de da do das dos em no na nos nas para pra por com sem e ou que como qual"
     " quais é ser se ao aos à às the of to in for and on how what".split()
@@ -59,6 +61,20 @@ QUERY_CACHE_MAX = 10_000
 embedder = httpx.AsyncClient(base_url=EMBED_URL, timeout=10)
 buckets: dict[str, tuple[float, float]] = {}  # ip -> (tokens, last seen)
 query_vectors: dict[str, tuple[float, str]] = {}  # query normalizada -> (expira em, vetor)
+
+
+class TitleStats:
+    """Em quantos títulos de uma amostra do índice cada palavra aparece. Renovada de hora em hora,
+    em segundo plano; vazia, todos os termos pesam igual."""
+
+    def __init__(self) -> None:
+        self.df: Counter[str] = Counter()
+        self.docs = 0
+        self.at = -TITLE_STATS_TTL
+        self.task: asyncio.Task[None] | None = None
+
+
+titles = TitleStats()
 
 BM25 = """
 SELECT id, bm25 <&> to_bm25query('pages_bm25', tokenizer_catalog.tokenize($1, 'pt')) AS score
@@ -213,9 +229,12 @@ async def run_search(
     fresh = not boosts or any(t in FRESH_WORDS or re.fullmatch(r"20\d\d", t) for t in terms)
     today = dt.date.today()
     found = {i: set(words(f"{meta[i]['title'] or ''} {meta[i]['url']}")) for i in candidates}
-    # Termo raro entre os candidatos pesa mais: "gta" e "6" mais que "requisitos" ou "vale".
-    n = len(candidates)
-    weight = {t: math.log(1 + n / (1 + sum(t in f for f in found.values()))) for t in terms}
+    # Termo raro no corpus pesa mais: "rtx" e "gta" mais que "vale", "comprar" ou "requisitos".
+    # Raridade entre os candidatos invertia isso: o termo que os trouxe aparece em quase todos.
+    if time.monotonic() - titles.at > TITLE_STATS_TTL:
+        titles.at = time.monotonic()
+        titles.task = asyncio.create_task(refresh_titles(pool))  # referência: não some no GC
+    weight = {t: math.log(1 + (titles.docs + 1) / (1 + titles.df[t])) for t in terms}
     total = sum(weight.values()) or 1
     for page_id in candidates:
         m = meta[page_id]
@@ -346,6 +365,19 @@ async def embed_query(q: str) -> str | None:
         query_vectors.clear()
     query_vectors[key] = (time.monotonic() + QUERY_CACHE_TTL, vec)
     return vec
+
+
+async def refresh_titles(pool: asyncpg.Pool) -> None:
+    try:
+        rows = await pool.fetch(TITLE_SAMPLE)
+    except Exception as e:
+        log.warning("title stats failed: %s", e)
+        return
+    df: Counter[str] = Counter()
+    for r in rows:
+        df.update(set(words(r["title"])))
+    titles.df, titles.docs = df, len(rows)
+    log.info("title stats: %d titles, %d words", len(rows), len(df))
 
 
 def words(text: str) -> list[str]:
