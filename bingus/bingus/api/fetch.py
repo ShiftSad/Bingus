@@ -84,6 +84,7 @@ class Release(BaseModel):
 class Seed(BaseModel):
     urls: list[str]
     langs: list[str] | None = None  # idiomas aceitos nos hosts dessas URLs, ex. ["pt", "en"]
+    priority: int = 0  # foco do crawl: hosts nerd/tech na frente, ver PRIORITY_DECAY
 
 
 Links = dict[int, tuple[str, str, int]]  # url_hash -> (url, host, depth)
@@ -93,7 +94,7 @@ LEASE_HOSTS = """
 WITH picked AS (
     SELECT host FROM hosts
     WHERE NOT blocked AND next_due <= now() AND (leased_until IS NULL OR leased_until < now())
-    ORDER BY seeded DESC, (page_count = 0) DESC, (host LIKE '%.br') DESC, next_due
+    ORDER BY priority DESC, seeded DESC, (page_count = 0) DESC, (host LIKE '%.br') DESC, next_due
     LIMIT $1
     FOR UPDATE SKIP LOCKED
 )
@@ -132,8 +133,9 @@ FROM pages WHERE host = $1 AND fail_count < 10 AND next_check_at <= now()
 ORDER BY next_check_at LIMIT $2
 """
 
-# Quanto maior o host, mais ele espera entre lotes: sqrt(page_count) segundos.
-COOLDOWN = "now() + make_interval(secs => sqrt(page_count))"
+# Quanto maior o host, mais ele espera entre lotes: sqrt(page_count) segundos, dividido pela
+# prioridade, para os hosts do foco andarem no ritmo do crawl_delay.
+COOLDOWN = "now() + make_interval(secs => sqrt(page_count) / (1 + priority))"
 
 RELEASE_HOST = f"""
 UPDATE hosts h SET leased_until = NULL, next_due = greatest({COOLDOWN}, coalesce(least(
@@ -150,6 +152,17 @@ INSERT INTO hosts (host, langs)
 SELECT h, CASE WHEN h LIKE '%.br' THEN '{pt,en}' ELSE '{pt}' END::text[]
 FROM unnest($1::text[]) AS t(h) ON CONFLICT DO NOTHING
 """
+
+# Link achado num host prioritário: o destino herda a prioridade menos PRIORITY_DECAY. Só para
+# esses, porque DO UPDATE trava a linha e hosts populares eram fonte de deadlock.
+INSERT_HOSTS_PRIORITY = """
+INSERT INTO hosts (host, langs, priority)
+SELECT h, CASE WHEN h LIKE '%.br' THEN '{pt,en}' ELSE '{pt}' END::text[], $2
+FROM unnest($1::text[]) AS t(h)
+ON CONFLICT (host) DO UPDATE SET priority = EXCLUDED.priority
+WHERE hosts.priority < EXCLUDED.priority AND hosts.page_count = 0
+"""
+PRIORITY_DECAY = 2
 
 ENSURE_PAGE = """
 INSERT INTO pages (url_hash, url, host, depth) VALUES ($1, $2, $3, $4)
@@ -246,22 +259,28 @@ async def results(body: FetchResults, name: str = Depends(worker)):
     started = time.monotonic()
     outcomes: Counter[str] = Counter()
     queued = 0
-    links: Links = {}
+    links: dict[int, Links] = {0: {}}  # prioridade herdada pelos hosts novos -> links
     for url in body.urls:
-        add_link(links, url, 0)
+        add_link(links[0], url, 0)
     by_host: dict[str, list[PageResult]] = {}
     for page in body.pages:
         by_host.setdefault(host_of(page.url), []).append(page)
     async with db.pool().acquire() as conn:
+        priority = dict(
+            await conn.fetch("SELECT host, priority FROM hosts WHERE host = ANY($1)", list(by_host))
+        )
         for host, info in sorted(body.hosts.items()):
             await in_tx(conn, save_host, host, info)
         for host in sorted(by_host):
             o, n, found = await in_tx(conn, ingest_pages, by_host[host])
             outcomes += o
             queued += n
+            inherited = max(priority.get(host, 0) - PRIORITY_DECAY, 0)
             for h, link in found.items():
-                links.setdefault(h, link)
-        added = await in_tx(conn, add_frontier, links)
+                links.setdefault(inherited, {}).setdefault(h, link)
+        added = 0
+        for inherited, group in sorted(links.items(), reverse=True):
+            added += await in_tx(conn, add_frontier, group, inherited)
         for host in sorted(set(by_host) | set(body.hosts)):
             await conn.execute(RELEASE_HOST, host)
         ms = int((time.monotonic() - started) * 1000)
@@ -317,9 +336,11 @@ async def seed(body: Seed, name: str = Depends(worker)):
     async with db.pool().acquire() as conn, conn.transaction():
         added = await add_frontier(conn, links)
         await conn.execute(  # semeado passa na frente da fila de hosts
-            "UPDATE hosts SET seeded = true, langs = coalesce($2, langs) WHERE host = ANY($1)",
-            hosts,
+            "UPDATE hosts SET seeded = true, langs = coalesce($2, langs),"
+            + " priority = greatest(priority, $3) WHERE host = ANY($1)",
+            sorted(hosts),
             body.langs,
+            body.priority,
         )
     return {"added": added}
 
@@ -439,12 +460,19 @@ def add_link(links: Links, url: str, depth: int) -> None:
         links.setdefault(url_hash(url), (url, host_of(url), depth))
 
 
-async def add_frontier(conn: Conn, links: Links) -> int:
-    """Sorted inserts: two transactions inserting the same rows in different orders deadlock."""
+async def add_frontier(conn: Conn, links: Links, priority: int = 0) -> int:
+    """Sorted inserts: two transactions inserting the same rows in different orders deadlock.
+
+    priority > 0 is inherited by hosts never crawled yet, the lite version of focused crawling:
+    whoever a nerd site links to is probably nerd too.
+    """
     if not links:
         return 0
     rows = sorted(links.items())
     hashes = [h for h, _ in rows]
     urls, hosts, depths = (list(col) for col in zip(*(v for _, v in rows), strict=True))
-    await conn.execute(INSERT_HOSTS, sorted(set(hosts)))
+    if priority > 0:
+        await conn.execute(INSERT_HOSTS_PRIORITY, sorted(set(hosts)), priority)
+    else:
+        await conn.execute(INSERT_HOSTS, sorted(set(hosts)))
     return await conn.fetchval(ADD_FRONTIER, hashes, urls, hosts, depths) or 0

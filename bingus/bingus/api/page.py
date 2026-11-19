@@ -4,9 +4,10 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from bingus.api import db, llm
+from bingus.api.deps import search_key
 from bingus.api.fetch import add_frontier, add_link
 from bingus.common.hashing import url_hash
 from bingus.common.urls import normalize
@@ -23,7 +24,7 @@ http = httpx.AsyncClient(
 )
 
 
-@router.get("/page")
+@router.get("/page", dependencies=[Depends(search_key)])
 async def page(url: str, prompt: str | None = None):
     """A stored page. With a prompt, the LLM answers it over the page text (cached in RAM only)."""
     canonical = normalize(url)

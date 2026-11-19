@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from bingus.api import db, embed, fetch, metrics, page, search, seed, tools
+from bingus.api.deps import SearchKeyGate
 
 
 @asynccontextmanager
@@ -35,7 +36,8 @@ async def health():
     return {"ok": True}
 
 
-app.mount("/", tools.app)  # MCP em /mcp; por último, porque a montagem casa com qualquer caminho
+# MCP em /mcp. Por último, porque a montagem casa com qualquer caminho.
+app.mount("/", SearchKeyGate(tools.app))
 
 
 def main() -> None:

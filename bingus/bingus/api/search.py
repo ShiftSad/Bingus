@@ -9,9 +9,10 @@ from collections import Counter
 
 import asyncpg
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from bingus.api import db
+from bingus.api.deps import search_key
 from bingus.api.page import ensure_summary
 
 log = logging.getLogger("bingus.search")
@@ -53,17 +54,54 @@ FROM pages WHERE id = ANY($1)
 """
 
 
-@router.get("/search")
+@router.get("/search", dependencies=[Depends(search_key)])
 async def search(
-    request: Request, q: str, limit: int = 10, offset: int = 0, summaries: bool = True
+    request: Request,
+    q: str,
+    limit: int = 10,
+    offset: int = 0,
+    summaries: bool = True,
+    format: str | None = None,
+    pageno: int = 1,
 ):
     """Hybrid search: BM25 on pages and vectors on chunks, fused with reciprocal rank fusion.
 
     summaries=false skips the LLM: stored summaries still come back, missing ones stay null.
+    format=json answers like SearXNG (pageno pages), which Open WebUI, LangChain and friends
+    already speak: pointing them at Bingus as if it were a SearXNG is enough.
     """
     if not allow(client_ip(request)):
         raise HTTPException(429, "Muitas buscas. Espere um pouco.")
+    if format == "json":
+        res = await run_search(q, limit, offset or (max(pageno, 1) - 1) * limit, False)
+        return searxng(res)
     return await run_search(q, limit, offset, summaries)
+
+
+def searxng(res: dict) -> dict:
+    results = [
+        {
+            "url": r["url"],
+            "title": r["title"] or r["url"],
+            "content": r["summary"] or r["snippet"] or "",
+            "engine": "bingus",
+            "engines": ["bingus"],
+            "category": "general",
+            "score": r["score"],
+            "publishedDate": r["published"],
+        }
+        for r in res["results"]
+    ]
+    return {
+        "query": res["query"],
+        "number_of_results": len(results),
+        "results": results,
+        "answers": [],
+        "corrections": [],
+        "infoboxes": [],
+        "suggestions": [],
+        "unresponsive_engines": [["bingus-vetorial", w] for w in res["warnings"]],
+    }
 
 
 async def run_search(q: str, limit: int = 10, offset: int = 0, summaries: bool = True) -> dict:

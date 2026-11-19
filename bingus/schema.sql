@@ -19,10 +19,15 @@ CREATE TABLE hosts (
     rank         real NOT NULL DEFAULT 0,
     blocked      boolean NOT NULL DEFAULT false,
     seeded       boolean NOT NULL DEFAULT false, -- veio de /fetch/seed: passa na frente da fila
+    priority     smallint NOT NULL DEFAULT 0,  -- foco do crawl e do embed; herdada por links, -2 por salto
     next_due     timestamptz NOT NULL DEFAULT now(),  -- trabalho mais antigo pendente no host
     leased_until timestamptz                  -- host entregue a um fetch worker
 );
 CREATE INDEX hosts_due ON hosts (next_due) WHERE NOT blocked;
+-- A ordem exata da lease de hosts, para ela não ordenar a tabela inteira a cada lote.
+CREATE INDEX hosts_queue ON hosts
+    (priority DESC, seeded DESC, (page_count = 0) DESC, (host LIKE '%.br') DESC, next_due)
+WHERE NOT blocked;
 
 -- URLs descobertas e nunca buscadas. A linha some quando vira página.
 CREATE TABLE frontier (
@@ -140,11 +145,13 @@ model = "gemma2b"
 to_lowercase = {}
 $$);
 
--- Prioridade de um chunk na fila do embed: PageRank da página, com a Wikipédia (entre -1 e 0)
--- atrás de qualquer outro host. Gravada ao enfileirar e refeita pelo bingus-rank.
+-- Prioridade de um chunk na fila do embed: PageRank da página mais 100 por ponto de prioridade
+-- do host (o foco nerd/tech passa na frente), com a Wikipédia (entre -1 e 0) atrás de qualquer
+-- outro host. Gravada ao enfileirar e refeita pelo bingus-rank.
 CREATE FUNCTION embed_priority(host text, rank real) RETURNS real
-LANGUAGE sql IMMUTABLE AS $f$
-    SELECT CASE WHEN host = 'pt.wikipedia.org' THEN -1 / (1 + rank) ELSE rank END
+LANGUAGE sql STABLE AS $f$
+    SELECT CASE WHEN $1 = 'pt.wikipedia.org' THEN -1 / (1 + $2)
+                ELSE $2 + 100 * coalesce((SELECT h.priority FROM hosts h WHERE h.host = $1), 0) END
 $f$;
 
 CREATE FUNCTION pages_bm25() RETURNS trigger LANGUAGE plpgsql AS $f$

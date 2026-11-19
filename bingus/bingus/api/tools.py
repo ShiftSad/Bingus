@@ -69,8 +69,10 @@ async def read_page(url: str, question: str | None = None) -> str:
     return "\n".join(out)
 
 
+# Sem estado: atrás de proxy ou com vários processos, qualquer um atende qualquer request.
 app = server.streamable_http_app(
+    stateless_http=True,
     transport_security=TransportSecuritySettings(
         allowed_hosts=HOSTS + [f"{h}:*" for h in HOSTS],
-    )
+    ),
 )
