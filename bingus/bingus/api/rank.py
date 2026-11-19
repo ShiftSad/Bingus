@@ -16,25 +16,31 @@ DAMPING = 0.85
 ITERATIONS = 20
 
 
-async def load(conn: asyncpg.Connection, sql: str, cols: int) -> np.ndarray:
+async def stream(conn: asyncpg.Connection, sql: str, cols: int, each) -> None:
     """COPY em texto convertido para numpy por pedaço. Nunca vira lista de Python."""
-    parts: list[np.ndarray] = []
     tail = b""
 
     async def sink(chunk: bytes) -> None:
         nonlocal tail
         data = tail + chunk
         cut = data.rfind(b"\n") + 1
-        parts.append(np.fromstring(data[:cut].decode(), dtype=np.int64, sep="\t"))
+        if cut:
+            each(np.fromstring(data[:cut].decode(), dtype=np.int64, sep="\t").reshape(-1, cols))
         tail = data[cut:]
 
     await conn.copy_from_query(sql, output=sink)
-    return np.concatenate(parts).reshape(-1, cols) if parts else np.empty((0, cols), np.int64)
+
+
+async def load(conn: asyncpg.Connection, sql: str, cols: int) -> np.ndarray:
+    parts: list[np.ndarray] = []
+    await stream(conn, sql, cols, parts.append)
+    return np.concatenate(parts) if parts else np.empty((0, cols), np.int64)
 
 
 def pagerank(n: int, src: np.ndarray, dst: np.ndarray) -> np.ndarray:
     out = np.bincount(src, minlength=n)
-    weight = (1.0 / out[src]).astype(np.float32)  # cada página divide 1 entre seus links
+    # cada página divide 1 entre seus links; por página e depois indexado, sem float64 por link
+    weight = (1 / np.maximum(out, 1)).astype(np.float32)[src]
     m = sp.csr_matrix((weight, (dst, src)), shape=(n, n))  # m @ rank = quanto cada uma recebe
     dangling = out == 0  # sem links: distribui para todos, senão o rank vaza
     rank = np.full(n, 1.0 / n, dtype=np.float32)
@@ -49,27 +55,38 @@ async def run() -> None:
     conn = await asyncpg.connect(os.environ["DATABASE_URL"])
     # mesmo snapshot nas duas leituras: com o crawler gravando, links de páginas novas
     # apontavam para fora da matriz
+    # Os links são resolvidos por pedaço do COPY, direto para posições int32: inteiros, os 238
+    # milhões de pares de int64 e as cópias temporárias passavam dos 14 GB do container.
+    srcs: list[np.ndarray] = []
+    dsts: list[np.ndarray] = []
+    total = 0
+
+    def resolve(edges: np.ndarray) -> None:
+        nonlocal total
+        total += len(edges)
+        # out_links guarda url_hash do destino; vira posição na matriz por busca binária
+        pos = np.searchsorted(sorted_hashes, edges[:, 1])
+        pos[pos == n] = 0
+        found = sorted_hashes[pos] == edges[:, 1]  # destino que ainda não é página é ignorado
+        dsts.append(order[pos[found]].astype(np.int32))
+        srcs.append(np.searchsorted(ids, edges[found, 0]).astype(np.int32))
+
     async with conn.transaction(isolation="repeatable_read", readonly=True):
         nodes = await load(conn, "SELECT id, url_hash FROM pages ORDER BY id", 2)
-        edges = await load(
-            conn, "SELECT id, unnest(out_links) FROM pages WHERE out_links IS NOT NULL", 2
+        ids, hashes = np.ascontiguousarray(nodes[:, 0]), nodes[:, 1]
+        n = len(ids)
+        if n == 0:
+            return
+        order = np.argsort(hashes)
+        sorted_hashes = hashes[order]
+        del nodes, hashes
+        await stream(
+            conn, "SELECT id, unnest(out_links) FROM pages WHERE out_links IS NOT NULL", 2, resolve
         )
-    ids, hashes = nodes[:, 0], nodes[:, 1]
-    n = len(ids)
-    log.info("%d pages, %d links, loaded in %.0fs", n, len(edges), time.time() - started)
-    if n == 0:
-        return
-
-    # out_links guarda url_hash do destino; resolve para posição na matriz por busca binária
-    order = np.argsort(hashes)
-    sorted_hashes = hashes[order]
-    pos = np.searchsorted(sorted_hashes, edges[:, 1])
-    pos[pos == n] = 0
-    found = sorted_hashes[pos] == edges[:, 1]  # destino que ainda não é página é ignorado
-    dst = order[pos[found]].astype(np.int32)
-    src = np.searchsorted(ids, edges[found, 0]).astype(np.int32)
-    del edges, pos, found
-    log.info("%d links resolved", len(src))
+    src, dst = np.concatenate(srcs), np.concatenate(dsts)
+    srcs.clear()
+    dsts.clear()
+    log.info("%d pages, %d links, %d resolved, in %.0fs", n, total, len(src), time.time() - started)
 
     rank = pagerank(n, src, dst)
     log.info("pagerank done in %.0fs, max %.1f", time.time() - started, rank.max())
