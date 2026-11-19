@@ -26,9 +26,9 @@ WITH picked AS (
     FOR UPDATE OF c SKIP LOCKED
 )
 UPDATE chunks c SET leased_until = now() + $2
-FROM picked JOIN pages p ON p.id = picked.page_id
+FROM picked JOIN texts t ON t.page_id = picked.page_id
 WHERE c.page_id = picked.page_id AND c.seq = picked.seq
-RETURNING c.page_id, c.seq, substr(p.text, c.start_ch + 1, c.end_ch - c.start_ch) AS text
+RETURNING c.page_id, c.seq, substr(t.text, c.start_ch + 1, c.end_ch - c.start_ch) AS text
 """
 
 SAVE_EMBEDDING = """

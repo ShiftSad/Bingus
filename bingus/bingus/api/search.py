@@ -34,9 +34,8 @@ MAX_PER_HOST = 2  # um site ocupa no máximo isso antes de os outros aparecerem
 TITLE_WEIGHT = 1.0
 TITLE_STATS_TTL = 3600
 TITLE_SAMPLE = "SELECT title FROM pages TABLESAMPLE SYSTEM (5) WHERE title IS NOT NULL LIMIT 100000"
-TEXT_SAMPLE = """
-SELECT left(text, 3000) AS text FROM pages TABLESAMPLE SYSTEM (1) WHERE text IS NOT NULL LIMIT 20000
-"""
+# texts mora no HD: cada bloco sorteado é um acesso ao disco, então a amostra fica em ~2 mil blocos.
+TEXT_SAMPLE = "SELECT left(text, 3000) AS text FROM texts TABLESAMPLE SYSTEM (0.25) LIMIT 5000"
 # O tokenizador do BM25 não tem nada em comum entre "memoria" e "memória", e quem busca costuma
 # digitar sem acento. A busca troca a palavra pela grafia acentuada quando o corpus quase sempre a
 # escreve assim. Medido em títulos e textos: "historia" 9 x 2276, "memoria" 7 x 993; "video" fica
@@ -116,8 +115,8 @@ ORDER BY page_count DESC LIMIT 1
 ROOT_PAGE = "SELECT id FROM pages WHERE url_hash = ANY($1) AND content_hash IS NOT NULL LIMIT 1"
 EMBEDDED = "SELECT DISTINCT page_id FROM chunks WHERE page_id = ANY($1) AND embedding IS NOT NULL"
 PAGES = """
-SELECT id, url, host, title, text, summary, content_hash, rank, published_at
-FROM pages WHERE id = ANY($1)
+SELECT p.id, p.url, p.host, p.title, t.text, p.summary, p.content_hash, p.rank, p.published_at
+FROM pages p LEFT JOIN texts t ON t.page_id = p.id WHERE p.id = ANY($1)
 """
 
 

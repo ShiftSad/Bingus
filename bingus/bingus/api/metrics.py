@@ -30,7 +30,7 @@ GAUGES = {  # métrica -> campo da última amostra
 
 HELP = {
     "bingus_pages": ("gauge", "Páginas buscadas, inclusive falhas e outros idiomas"),
-    "bingus_pages_with_text": ("gauge", "Páginas com texto extraído, estimativa do ANALYZE"),
+    "bingus_pages_with_text": ("gauge", "Páginas com texto extraído, linhas vivas de texts"),
     "bingus_frontier_urls": ("gauge", "URLs descobertas e nunca buscadas"),
     "bingus_hosts": ("gauge", "Hosts conhecidos"),
     "bingus_hosts_due": ("gauge", "Hosts com trabalho vencido, amostra do último minuto"),
@@ -63,9 +63,7 @@ WITH live AS (
 )
 SELECT
     (SELECT n FROM live WHERE relname = 'pages') AS pages,
-    (SELECT round(n * (1 - null_frac))::bigint FROM live, pg_stats
-     WHERE relname = 'pages' AND schemaname = 'public' AND tablename = 'pages'
-       AND attname = 'text') AS pages_with_text,
+    (SELECT n FROM live WHERE relname = 'texts') AS pages_with_text,
     (SELECT n FROM live WHERE relname = 'frontier') AS frontier_urls,
     (SELECT n FROM live WHERE relname = 'hosts') AS hosts,
     (SELECT hosts_due FROM api_samples ORDER BY at DESC LIMIT 1) AS hosts_due,

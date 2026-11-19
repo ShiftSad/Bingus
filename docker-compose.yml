@@ -41,6 +41,8 @@ services:
       - "${BINGUS_PG_BIND:-127.0.0.1:5432}:5432"
     volumes:
       - ${BINGUS_PG_DATA:-pgdata}:/var/lib/postgresql
+      # Tablespace hdd: só a tabela texts, que a busca lê para 10 a 20 resultados. Ver schema.sql.
+      - ${BINGUS_PG_TABLESPACE:-pgtablespace}:/tablespace
       - ./bingus/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
@@ -175,6 +177,7 @@ services:
 
 volumes:
   pgdata:
+  pgtablespace:
   hf_cache:
   grafana:
   alloy:

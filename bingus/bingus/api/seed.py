@@ -60,8 +60,9 @@ SELECT p.*, h.page_count, h.pt_count,
 FROM seed_progress p LEFT JOIN hosts h ON h.host = 'pt.wikipedia.org' WHERE p.name = 'wikipedia'
 """
 RECENT = """
-SELECT url, title, length(text) AS chars, fetched_at FROM pages
-WHERE host = 'pt.wikipedia.org' ORDER BY id DESC LIMIT 20
+SELECT p.url, p.title, length(t.text) AS chars, p.fetched_at
+FROM pages p LEFT JOIN texts t ON t.page_id = p.id
+WHERE p.host = 'pt.wikipedia.org' ORDER BY p.id DESC LIMIT 20
 """
 
 router = APIRouter()

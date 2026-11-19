@@ -57,7 +57,8 @@ Fetch worker aceita ainda `BINGUS_HOSTS`, hosts em voo, `BINGUS_PER_HOST`, `BING
 - Orçamento: 32 GB de RAM somando tudo, 16 CPUs, 100 GB de NVMe, até 1 TB no HDD (`/mnt/hdd/bingus`,
   SMR, IOPS da conta limitados a 100 de leitura e 60 de escrita, dividido com o MySQL). O teto de RAM e
   CPU é o `bingus.slice` do systemd do usuário, ver Deploy.
-- Banco no NVMe. O HDD fica para arquivos grandes e sequenciais: dumps, backups.
+- Banco no NVMe, menos a tabela `texts`, no tablespace `hdd`. O HDD fica para isso e para arquivos
+  grandes e sequenciais: dumps, backups.
 - O dedicado antigo (10.10.0.2, Postgres com 1,17 milhão de páginas) e `api.bingus.sh` estavam fora do
   ar nessa data. O banco daqui nasceu vazio.
 - VPS de entrada com Caddy e TLS na frente da API (10.10.0.1 na WireGuard); aponta para o dedicado antigo.
@@ -107,9 +108,10 @@ Schema em `bingus/schema.sql`. Tabelas:
 
 - `hosts`: um por domínio. robots.txt, crawl_delay, max_pages, rank, blocked, lease.
 - `frontier`: URLs descobertas e nunca buscadas. Chave é `url_hash`. A linha some quando vira página.
-- `pages`: uma por URL buscada. Texto extraído inteiro, comprimido por TOAST lz4. `summary` nulo até
-  alguém acessar a página. `out_links` guarda os `url_hash` apontados. `bm25` é gerado por trigger.
-- `chunks`: fatias de `pages.text` por offset de caractere. `embedding rabitq8(512)`. `simhash` do
+- `pages`: uma por URL buscada. `summary` nulo até alguém acessar a página. `out_links` guarda os
+  `url_hash` apontados. `bm25` é gravado pela ingestão, no mesmo UPDATE, a partir do texto.
+- `texts`: texto extraído inteiro de cada página com texto, chave `page_id`, no HD. Ver Deploy.
+- `chunks`: fatias de `texts.text` por offset de caractere. `embedding rabitq8(512)`. `simhash` do
   texto embedado. Embedding nulo significa fila do embed worker, na ordem de `priority`.
 - `pages_content` é `(content_hash, id)`: acha a gêmea de menor id sem ordenar todas as cópias.
 
@@ -120,7 +122,7 @@ Regras:
   https quando possível, respeita `rel=canonical`.
 - `content_hash` é SHA-256 do texto extraído, nunca do HTML. Texto igual em URLs diferentes
   não gera embedding novo.
-- `pages.text` começa com o título na primeira linha. É o que o BM25 indexa.
+- `texts.text` começa com o título na primeira linha. É o que o BM25 indexa.
 - Intervalo adaptativo: conteúdo igual dobra `check_interval`, diferente divide por dois.
   Mínimo 1 dia, máximo 90 dias. Novo começa em 7 dias. HTTP 304 conta como igual.
 - `fail_count` 10 tira a página do scheduler. Ela fica, só não é revisitada.
@@ -191,7 +193,8 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
   worker fazia 2 páginas por segundo. Um host recebe no máximo 60 segundos de trabalho por lote.
   Throughput se ajusta em `BINGUS_HOSTS`, não em URLs por host; extração é uma thread só.
 - Um worker satura um núcleo (GIL: HTTP, extração e links no mesmo processo), então se escala em
-  processos. Nesta máquina: 12 workers nativos com 60 hosts em voo, uns 20 páginas novas por segundo
+  processos. Nesta máquina eram 12 workers nativos; desde 19/11 são 4 (`bingus-fetch@1..4`), porque
+  a meta virou cobertura e não escala, ver Referências. Com 12 e 60 hosts em voo, uns 20 páginas novas por segundo
   no total. Extração custava 258 ms de CPU por página, 85% no `bare_extraction`; com `fast=True` do
   trafilatura caiu 2,4x, artigos idênticos, e homes de portal viram hubs.
 - Nesta máquina os fetch workers rodam fora do Docker (`systemd/bingus-fetch@.service`, venv em
@@ -307,6 +310,22 @@ com menos prioridade. O MCP é para um servidor de amigos nerds: o nicho bom pri
 - Crawl focado simples: um host ainda nunca visitado, linkado de um host com prioridade p, nasce
   com p - 2 (`PRIORITY_DECAY`). Só nesses o insert usa DO UPDATE, que trava a linha; para os demais,
   DO NOTHING, porque hosts populares eram fonte de deadlock.
+
+## Referências (Tavily e Exa)
+
+Desde 19/11 a meta é cobertura, não escala: o que as buscas de referência trazem precisa estar no
+índice. Chaves no `.env`: `TAVILY_API_TOKEN` (1 crédito por busca básica, 100 por minuto) e
+`EXA_API_TOKEN` (US$ 0,007 por busca `auto` de até 10 resultados, 10 por segundo). O `country` do
+Tavily piorou os resultados; o Exa vai com `userLocation: "BR"`.
+
+- Medido em 80 buscas (40 nerd da avaliação, 40 gerais do dia a dia): dos 10 primeiros de cada
+  referência, o Bingus tinha indexados 9 a 12% nas nerd e 4% nas gerais. A maior parte faltando era
+  de sites que o crawler já conhece (34 a 50%), como gov.br, g1, techtudo, clubedohardware: o crawl
+  espalhado não pega as páginas que as pessoas procuram. 9 a 11% das nerd eram sites em inglês
+  bloqueados pela regra de idioma; a Wikipédia tinha 15 páginas, sem o dump carregado.
+- As 1.846 URLs citadas foram semeadas com prioridade 6 e `langs` de cada host intocado. Seis
+  documentações em inglês citadas mais de uma vez foram desbloqueadas com `{pt,en}`: docs.docker.com,
+  docs.gitlab.com, ubuntu.com, freecodecamp, geeksforgeeks, cloud.google.com.
 
 ## API pública
 
@@ -458,7 +477,7 @@ pela rede do compose e faz remote write para o mesmo Prometheus, com a mesma `in
   chave em `BINGUS_METRICS_KEY`, que o compose passa ao Alloy. A API é pública pelo Caddy.
 - Formato texto do Prometheus escrito à mão em `api/metrics.py`, sem dependência. Custa duas
   consultas de poucos milissegundos: `n_live_tup` de `pg_stat_user_tables` para as tabelas,
-  `reltuples` dos índices parciais de chunks, `null_frac` de `pages.text` para páginas com texto,
+  `reltuples` dos índices parciais de chunks, `n_live_tup` de `texts` para páginas com texto,
   a última linha de `api_samples` para hosts vencidos e em lease, e os tamanhos.
   Depois de uma queda do Postgres o `n_live_tup` zera até o próximo ANALYZE.
 - Os contadores (`*_total`) vivem na memória da API, alimentados por `record_batch` e pelo
@@ -484,7 +503,7 @@ Na máquina compartilhada:
   e vacuum) e `bingus-vigia` (a cada 10 min: pausa os fetch workers com o banco em 90 GB e retoma só o
   que ele pausou). Instalação no cabeçalho de `systemd/bingus.slice`. Depende do linger do usuário,
   ativado, senão tudo morre quando as sessões fecham.
-- Boot: Docker rootless, os 12 fetch workers e os timers sobem com o systemd do usuário, e os
+- Boot: Docker rootless, os fetch workers habilitados e os timers sobem com o systemd do usuário, e os
   containers têm `restart: unless-stopped`. Só que o Docker restaura os containers antes da WireGuard
   subir, e porta publicada num IP inexistente impede o container de iniciar (testado: "cannot assign
   requested address"). `bingus.service` roda `systemd/sobe.sh`, que espera os IPs dos `*_BIND` do
@@ -501,15 +520,18 @@ Na máquina compartilhada:
   dá timeout de fora até alguém com sudo liberar, como
   `ufw allow in on wg0 from 10.10.0.0/24 to 10.10.0.50 port 5432 proto tcp` em 19/11. O Postgres tem
   `stop_grace_period: 2m`: com `checkpoint_timeout` de 30 min, os 10 s padrão acabavam em SIGKILL.
-- Tudo do banco fica no NVMe. Testado em 19/11: a tabela `pages` num tablespace no HD (índices no
-  NVMe) fez cada busca BM25 levar minutos, porque o scan lê milhares de blocos das linhas e do TOAST,
-  onde mora o vetor `bm25`. As buscas seguravam locks de buffer e travavam a ingestão. O scan do
-  `vchord_bm25` não atende `pg_cancel_backend` nem `pg_terminate_backend`; só `kill -9` no
+- No HD só a tabela `texts`. Testado em 19/11: a tabela `pages` inteira num tablespace no HD (índices
+  no NVMe) fez cada busca BM25 levar minutos, porque o scan lê milhares de blocos das linhas e do
+  TOAST, onde mora o vetor `bm25`. As buscas seguravam locks de buffer e travavam a ingestão. O scan
+  do `vchord_bm25` não atende `pg_cancel_backend` nem `pg_terminate_backend`; só `kill -9` no
   processo, e o Postgres faz uma recuperação curta. O TOAST não vai sozinho para outro tablespace,
-  porque é catálogo do sistema. Por página com texto são ~2,7 KB de texto comprimido, ~2,7 KB de
-  vetor BM25 e ~0,4 KB de links. Tirar só o texto para o HD pouparia ~20% do banco. Em média, cada
-  página nova custa ~7,5 KB, então os 90 GB da vigia comportam umas 10 milhões de páginas com texto.
-  `max_wal_size` é 4 GB: com 16 GB, o WAL ocupava 16 GB parados.
+  porque é catálogo do sistema. Por isso o texto saiu de `pages` para `texts`, no tablespace `hdd`
+  (`/tablespace/data` no container, `BINGUS_PG_TABLESPACE=/mnt/hdd/bingus/pg` no host). A busca lê
+  o texto só dos resultados mostrados, o embed lê os chunks alugados, e a amostra de grafias lê ~2
+  mil blocos por hora. Por página com texto são ~2,7 KB de texto comprimido (agora no HD), ~2,7 KB
+  de vetor BM25, ~3,2 KB de índice BM25 e ~0,6 KB de links. Com o mount sumindo, o container
+  continua de pé apontando para a pasta apagada e o Postgres não grava em `texts`: recriar com
+  `--force-recreate --no-deps postgres`. `max_wal_size` é 4 GB: com 16 GB, o WAL ocupava 16 GB.
 - Grafana no compose (`grafana/provisioning`): datasource com o usuário `grafana` só de leitura,
   dashboard `grafana/bingus.json` como home, anônimo como Viewer porque só a WireGuard alcança.
   O dashboard pedia o plugin `grafana-postgres-datasource`; o id real é `grafana-postgresql-datasource`.
@@ -579,7 +601,8 @@ do índice bm25. `gpu-unlock` (dobra BF16 na 3060 Ti) só age no boot, e a máqu
   com 335 mil artigos da Wikipédia, para 1,2 GB de dados. Por isso o tokenizador é o `gemma2b`
   pré-treinado, 256 mil tokens fixos, com filtro de minúsculas. Sem stemmer: subpalavras fazem
   parte do trabalho. No TOML, `model` vem antes dos blocos `[[character_filters]]`.
-- A coluna `bm25` é preenchida por um trigger plpgsql simples em INSERT e UPDATE de `text`.
+- A coluna `bm25` é gravada pelo `SAVE_CONTENT` da ingestão com `tokenize($texto, 'pt')`, no mesmo
+  UPDATE. Antes era um trigger sobre `pages.text`, que saiu para `texts`.
 - O índice bm25 incha com inserção incremental: 14 GB para 1,17 milhão de páginas, que caem para
   2,6 GB depois de `REINDEX INDEX CONCURRENTLY pages_bm25`, uns 3 minutos e sem travar nada.
   Reindexar de tempos em tempos, junto com o PageRank diário, por exemplo. Compacto, custa uns

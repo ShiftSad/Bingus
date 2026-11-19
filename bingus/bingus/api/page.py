@@ -17,7 +17,10 @@ from bingus.fetch.page import extract
 log = logging.getLogger("bingus.page")
 router = APIRouter()
 
-PAGE = "SELECT id, url, host, title, text, summary, content_hash FROM pages WHERE url_hash = $1"
+PAGE = """
+SELECT p.id, p.url, p.host, p.title, t.text, p.summary, p.content_hash
+FROM pages p LEFT JOIN texts t ON t.page_id = p.id WHERE p.url_hash = $1
+"""
 EXTRACT = ThreadPoolExecutor(max_workers=1)  # lxml em várias threads ao mesmo tempo dá segfault
 http = httpx.AsyncClient(
     headers={"User-Agent": UA}, timeout=15, follow_redirects=True, max_redirects=5

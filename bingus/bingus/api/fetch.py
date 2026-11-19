@@ -177,10 +177,16 @@ WHERE url_hash = $1
 """
 
 SAVE_CONTENT = """
-UPDATE pages SET status = $2, title = $3, text = $4, lang = $5, content_hash = $6, etag = $7,
-    last_modified = $8, check_interval = $9, next_check_at = now() + $9, out_links = $10,
-    published_at = $11, fetched_at = now(), last_changed_at = now(), summary = NULL, fail_count = 0
+UPDATE pages SET status = $2, title = $3, bm25 = tokenizer_catalog.tokenize($4, 'pt')::bm25vector,
+    lang = $5, content_hash = $6, etag = $7, last_modified = $8, check_interval = $9,
+    next_check_at = now() + $9, out_links = $10, published_at = $11, fetched_at = now(),
+    last_changed_at = now(), summary = NULL, fail_count = 0
 WHERE url_hash = $1
+"""
+
+SAVE_TEXT = """
+INSERT INTO texts (page_id, text) VALUES ($1, $2)
+ON CONFLICT (page_id) DO UPDATE SET text = EXCLUDED.text
 """
 
 UPSERT_CHUNK = """
@@ -406,6 +412,10 @@ async def ingest(conn: Conn, page: PageResult, links: Links) -> tuple[str, int]:
         [url_hash(u) for u in page_links],
         published(page.published),
     )
+    if page.text is None:  # virou hub
+        await conn.execute("DELETE FROM texts WHERE page_id = $1", row["id"])
+    else:
+        await conn.execute(SAVE_TEXT, row["id"], page.text)
     queued = await sync_chunks(conn, row["id"], digest, page.chunks, host, row["rank"])
     for url in page_links:
         add_link(links, url, page.depth + 1)

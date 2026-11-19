@@ -46,7 +46,6 @@ CREATE TABLE pages (
     host            text NOT NULL REFERENCES hosts,
     depth           smallint NOT NULL DEFAULT 0,
     title           text,
-    text            text,                     -- texto extraído, título na primeira linha
     summary         text,                     -- gerado por LLM só quando a página é acessada
     lang            text,
     published_at    date,                     -- data de publicação extraída da página
@@ -61,9 +60,8 @@ CREATE TABLE pages (
     fail_count      smallint NOT NULL DEFAULT 0,
     rank            real NOT NULL DEFAULT 0,
     out_links       bigint[],                 -- url_hash das páginas apontadas
-    bm25            bm25vector
+    bm25            bm25vector                -- tokens do texto, gravado junto com texts
 );
-ALTER TABLE pages ALTER COLUMN text SET COMPRESSION lz4;
 CREATE INDEX pages_host_due ON pages (host, next_check_at) WHERE fail_count < 10;
 CREATE INDEX pages_content ON pages (content_hash, id) WHERE content_hash IS NOT NULL;
 CREATE INDEX pages_bm25 ON pages USING bm25 (bm25 bm25_ops);
@@ -72,7 +70,19 @@ CREATE INDEX pages_rank ON pages (rank DESC);  -- embed worker pega as melhores 
 CREATE INDEX pages_foreign ON pages (fetched_at DESC) INCLUDE (lang)
 WHERE content_hash IS NULL AND lang IS NOT NULL;
 
--- Fatias de pages.text. Embedding nulo = fila do embed worker.
+-- Texto extraído, título na primeira linha. Separado de pages para morar no HD: a busca lê o texto
+-- só dos 10 a 20 resultados mostrados, já o BM25 e as linhas de pages são lidos em toda busca e
+-- ficam no NVMe. No dedicado a tabela nasce em `TABLESPACE hdd` (LOCATION '/tablespace/data', uma
+-- pasta do postgres dentro do mount) e a chave fica no NVMe. MAIN: comprimido e na própria linha,
+-- um acesso ao disco por texto; o TOAST, com índice e chunks à parte, custava três ou quatro.
+CREATE TABLE texts (
+    page_id bigint PRIMARY KEY,
+    text    text NOT NULL
+);
+ALTER TABLE texts ALTER COLUMN text SET STORAGE MAIN;
+ALTER TABLE texts ALTER COLUMN text SET COMPRESSION lz4;
+
+-- Fatias de texts.text. Embedding nulo = fila do embed worker.
 CREATE TABLE chunks (
     page_id      bigint NOT NULL REFERENCES pages ON DELETE CASCADE,
     seq          smallint NOT NULL,
@@ -157,10 +167,3 @@ LANGUAGE sql STABLE AS $f$
                 ELSE $2 + 100 * coalesce((SELECT h.priority FROM hosts h WHERE h.host = $1), 0) END
 $f$;
 
-CREATE FUNCTION pages_bm25() RETURNS trigger LANGUAGE plpgsql AS $f$
-BEGIN
-    NEW.bm25 := tokenizer_catalog.tokenize(NEW.text, 'pt')::bm25vector;
-    RETURN NEW;
-END $f$;
-CREATE TRIGGER pages_bm25 BEFORE INSERT OR UPDATE OF text ON pages
-    FOR EACH ROW EXECUTE FUNCTION pages_bm25();
