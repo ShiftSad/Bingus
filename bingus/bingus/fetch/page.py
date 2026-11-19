@@ -19,7 +19,7 @@ def extract(html: bytes, url: str) -> dict[str, Any] | None:
     tree = trafilatura.load_html(html)
     if tree is None:
         return None
-    tree.make_links_absolute(url)
+    tree.make_links_absolute(url, handle_failures="discard")  # um href quebrado perdia a página
     links = dict.fromkeys(
         normalize(str(href))
         for el, attr, href, _ in tree.iterlinks()
@@ -28,6 +28,16 @@ def extract(html: bytes, url: str) -> dict[str, Any] | None:
     links.pop(None, None)
     links.pop(url, None)
     canonical = tree.xpath('string(//link[@rel="canonical"]/@href)')
+
+    # O trafilatura apaga todo <form> com o que tem dentro, e páginas ASP.NET e fóruns Invision
+    # põem o conteúdo inteiro num. E toma o primeiro <article> pela página: cards de produto ou
+    # posts de fórum em <article> lado a lado deixavam só o primeiro card.
+    for el in tree.xpath("//form"):
+        el.drop_tag()
+    for el in tree.xpath("//article[../article[2]][not(ancestor::nav)]"):
+        el.tag = "div"
+    # Em fórum os posts ficam em blocos de comentário, que o modo de precisão apaga.
+    forum = b"DiscussionForumPosting" in html
 
     # fast pula os extratores de reserva: 2,4x menos CPU, que era 85% do custo do worker. Medido em
     # 23 páginas: artigos idênticos; só homes de portal perdem 50 a 700 caracteres de chamadas
@@ -38,7 +48,7 @@ def extract(html: bytes, url: str) -> dict[str, Any] | None:
         url=url,
         with_metadata=True,
         include_comments=False,
-        favor_precision=True,
+        favor_precision=not forum,
         fast=True,
         date_extraction_params={"extensive_search": False, "original_date": True},
         as_dict=True,
