@@ -16,6 +16,7 @@ Restart=always
 RestartSec=10
 TimeoutStopSec=30
 MemoryMax=2G
+CPUWeight=50  # sob disputa no slice, Postgres, API e embed (peso 100) passam na frente
 
 [Install]
 WantedBy=default.target
