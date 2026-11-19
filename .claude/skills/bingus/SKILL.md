@@ -51,11 +51,16 @@ Fetch worker aceita ainda `BINGUS_HOSTS`, hosts em voo, `BINGUS_PER_HOST`, `BING
 
 ## Infra
 
-- Dedicado Ubuntu Server 22 atrás de WireGuard: Postgres, API, embed worker com 1050 Ti (4 GB).
-- VPS de entrada com Caddy e TLS na frente da API.
-- Fetch workers em VPSs na Alemanha e no Brasil.
-- PC Windows com 3060 Ti roda embed worker nativo via `uv run bingus-embed`. Nada de Docker no Windows.
-- Recursos do dedicado: 16 a 24 GB de RAM, cerca de 4 núcleos. Eficiente, sem obsessão.
+- Desde 2026-11-19 tudo roda numa máquina Linux compartilhada (`craftsapiens`, 10.10.0.50 na
+  WireGuard) com a 3060 Ti inteira, Docker rootless. A máquina roda outras coisas (Pterodactyl, MySQL
+  em `/mnt/hdd`, outro usuário): **nunca reiniciar** e nunca passar do orçamento.
+- Orçamento: 32 GB de RAM somando tudo, 16 CPUs, 100 GB de NVMe, até 1 TB no HDD (`/mnt/hdd/bingus`,
+  SMR, IOPS da conta limitados a 100 de leitura e 60 de escrita, dividido com o MySQL). O teto de RAM e
+  CPU é o `bingus.slice` do systemd do usuário, ver Deploy.
+- Banco no NVMe. O HDD fica para arquivos grandes e sequenciais: dumps, backups.
+- O dedicado antigo (10.10.0.2, Postgres com 1,17 milhão de páginas) e `api.bingus.sh` estavam fora do
+  ar nessa data. O banco daqui nasceu vazio.
+- VPS de entrada com Caddy e TLS na frente da API (10.10.0.1 na WireGuard); aponta para o dedicado antigo.
 - Alvo: 10 milhões de páginas em cerca de 50 GB. Guia, não teto.
 
 ## Modelo de embedding
@@ -68,9 +73,11 @@ similaridade por cosseno, sem prefixo de instrução, contexto 32K.
   A saída do modelo já é int8, entregue como float32 com valores inteiros.
 - 2048 tokens por chunk, batch 8 na 1050 Ti. `BINGUS_EMBED_TOKENS` e `BINGUS_EMBED_BATCH`.
   `BINGUS_EMBED_LEASE` é quantos chunks pega da API por vez; 256 mantém a GPU sem vales.
-- Medido na 3060 Ti com chunks da Wikipédia: 5 chunks por segundo, batch 16 ou 32 dá no mesmo,
-  a GPU fica a 100% e usa 7 GB de VRAM com batch 32. É limite de computação do modelo, não de
-  configuração. Um milhão de chunks leva uns dois dias e meio nessa placa.
+- O worker ordena o lote alugado por tamanho antes de dividir em passadas: cada passada é preenchida
+  até o maior texto dela, e em ordem aleatória quase toda passada pagava 2048 tokens. Medido na 3060
+  Ti com 256 chunks da Wikipédia (média 2637 caracteres), batch 8: 2048 tokens, 7,3 chunks/s fora de
+  ordem e 16,2 ordenado; 1024 tokens, 15,3 e 25,5; 512 tokens, 32,4 e 42,7. Batch 32 dá no mesmo.
+  Pior passada com 2048 tokens: 1,3 s, que é o máximo que uma query de busca espera.
 - Query e documento usam o mesmo modelo sem prefixo.
 - O embed worker serve `POST /embed` na porta `BINGUS_EMBED_PORT`, padrão 8100, para queries de
   busca. Sem auth, só na rede interna. Query e lote se revezam num lock: a query espera no
@@ -78,10 +85,14 @@ similaridade por cosseno, sem prefixo de instrução, contexto 32K.
 - Torch vem do índice CUDA 12.6 do PyTorch, o último que roda na 1050 Ti. Configurado no
   `pyproject.toml`. No Windows a instalação é a mesma, `uv sync --extra embed`.
 - Fluxo: `POST /embed/batch?size=64` aluga chunks por 15 minutos e devolve o texto de cada um.
-  A lease pega primeiro páginas fora da Wikipédia e, dentro de cada grupo, segue o PageRank pelo
-  índice `pages_rank`. A Wikipédia só preenche o espaço restante quando não há outras páginas
-  pendentes. Com backlog grande, a busca vetorial enxerga primeiro o que mais importa.
+  A fila é o índice parcial `chunks_pending` sobre `chunks.priority`, gravada ao enfileirar com a
+  função SQL `embed_priority(host, rank)`: o PageRank da página, com a Wikipédia entre -1 e 0, atrás
+  de qualquer outro host. O `bingus-rank` refaz a prioridade dos pendentes. A versão anterior
+  percorria `pages_rank` passando por todas as páginas já embedadas e ficava mais lenta a cada dia.
   `POST /embed/results` recebe msgpack com bytes crus e grava com `quantize_to_rabitq8`.
+- Texto igual em várias páginas é embedado uma vez só: a lease entrega o chunk só à página de menor
+  id com aquele `content_hash`, e o resultado é copiado para as gêmeas pendentes (sem `embedded_at`,
+  que conta só o trabalho da GPU). Se a cópia ficou pendente com a gêmea já pronta, ela volta à fila.
 
 ## Banco
 
@@ -93,7 +104,8 @@ Schema em `bingus/schema.sql`. Tabelas:
 - `pages`: uma por URL buscada. Texto extraído inteiro, comprimido por TOAST lz4. `summary` nulo até
   alguém acessar a página. `out_links` guarda os `url_hash` apontados. `bm25` é gerado por trigger.
 - `chunks`: fatias de `pages.text` por offset de caractere. `embedding rabitq8(512)`. `simhash` do
-  texto embedado. Embedding nulo significa fila do embed worker.
+  texto embedado. Embedding nulo significa fila do embed worker, na ordem de `priority`.
+- `pages_content` é `(content_hash, id)`: acha a gêmea de menor id sem ordenar todas as cópias.
 
 Regras:
 
@@ -164,7 +176,12 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
   host virava dezenas por
   segundo e uma linha em `batches` para cada. Antes o lote inteiro esperava o host mais lento e o
   worker fazia 2 páginas por segundo. Um host recebe no máximo 60 segundos de trabalho por lote.
-  Throughput se ajusta em `BINGUS_HOSTS`, não em URLs por host; extração é uma thread só.
+  Throughput se ajusta em `BINGUS_HOSTS`, não em URLs por host; extração é uma thread só. Num crawl
+  novo quase todo host tem uma URL e custa um robots.txt: com 40 hosts em voo o worker ficava ocioso,
+  150 é o valor desta máquina.
+- Envio que falha volta para a fila do worker e vai no próximo flush, até 1000 hosts guardados.
+  A API repete o lote inteiro até cinco vezes em deadlock e grava hosts e páginas em ordem de host,
+  o que reduz os deadlocks entre workers e o seed.
 - Fetch worker busca `robots.txt` de host desconhecido, aplica localmente e devolve o conteúdo.
   A API guarda e usa para filtrar e dar ritmo. Sitemaps do robots viram URLs de profundidade 0.
 - Resultado de fetch é JSON com gzip: status, headers relevantes, título, texto, idioma, links.
@@ -194,7 +211,11 @@ frontend e o MCP chamam. Híbrida:
 - `timings` na resposta: milissegundos de bm25, embed_query, vector, fusion, pages, summaries e
   total. O frontend mostra na linha acima dos resultados.
 - Fusão por Reciprocal Rank Fusion com k = 60 sobre três listas: BM25, vetorial e os mesmos
-  candidatos ordenados por `pages.rank`. Sem pesos por enquanto.
+  candidatos ordenados por `pages.rank`. O PageRank pesa metade (`RANK_WEIGHT`): com peso cheio, ser o
+  primeiro em autoridade valia o mesmo que ser o primeiro em relevância.
+- Diversidade: um site ocupa no máximo `MAX_PER_HOST`, 2, posições antes de os outros aparecerem; o
+  excesso vai para o fim da lista, não some. Com a Wikipédia inteira no índice a busca virava uma busca
+  da Wikipédia, e não é essa a graça.
 - Resultados sem sumário ganham um na hora, em paralelo, com timeout de 20 s. Ver Sumários.
   `summaries=false` desliga a LLM: sumários já salvos ainda voltam, os que faltam ficam nulos.
   O frontend tem a chave "Gerar resumos", lembrada em localStorage.
@@ -204,6 +225,21 @@ frontend e o MCP chamam. Híbrida:
 - Rate limit por IP com token bucket em memória: rajada de 20, recarga de 1 por segundo, 429 ao
   estourar. Lê `X-Forwarded-For` porque o Caddy fica na frente. Constantes em `search.py`.
 - CORS liberado para GET, porque o frontend chama a API direto do browser.
+
+## MCP
+
+O produto. `bingus/api/tools.py`, SDK oficial `mcp` 2.x (`MCPServer`), montado na própria API em
+`/mcp` com transporte HTTP streamable. Duas ferramentas:
+
+- `search(query, limit)`: chama `run_search`, o núcleo de `/search` sem o rate limit por IP, sem LLM.
+  Devolve texto: título, URL, data e trecho de cada resultado.
+- `read_page(url, question)`: texto da página guardada; fora do índice, busca na hora com o mesmo
+  extrator do crawler (um request em nome de uma pessoa, como um navegador) e põe a URL na frontier.
+  Com `question` e LLM configurada, responde sobre a página. Até 20 mil caracteres.
+
+O SDK recusa com 421 qualquer `Host` fora de `BINGUS_MCP_HOSTS` (padrão `localhost,127.0.0.1`),
+proteção contra DNS rebinding. Nesta máquina: `localhost,127.0.0.1,10.10.0.50`. Para usar no Claude
+Code: `claude mcp add --transport http bingus http://10.10.0.50:2026/mcp`.
 
 ## Frontend
 
@@ -243,7 +279,12 @@ Rank e seed gravam em lotes de 50 mil ids, cada um em transação própria.
 
 ## Seeds
 
-`POST /fetch/seed` recebe uma lista de URLs para a frontier. Para a Wikipédia existe
+`POST /fetch/seed` recebe uma lista de URLs para a frontier. `seeds/brasil.txt` tem uns 200 sites
+brasileiros variados por categoria (notícias, governo, saúde, tecnologia, receitas, educação,
+esporte, cultura, dev...), a semente do banco desta máquina. A Wikipédia não é semeada: o dump
+inteiro contra poucos milhares de sites reais fazia toda busca devolver Wikipédia. Ela entra pelos
+links, com `max_pages` 20 mil. O carregador do dump continua aí para quando o resto do índice for
+grande o bastante. Para a Wikipédia existe
 `bingus-seed wikipedia data/ptwiki.tar.gz [pular N]`, em `bingus/api/seed.py`:
 
 - Dump HTML do Wikimedia Enterprise, `ptwiki-NS0-<data>-ENTERPRISE-HTML.json.tar.gz` em
@@ -292,10 +333,33 @@ rejeitadas por idioma, que ficam com `lang` e sem `content_hash`.
 Ao mexer, valide cada query no psql trocando `$__timeGroupAlias` por `date_trunc` e
 `$__timeFilter` por um filtro de data.
 
-## Deploy no dedicado
+## Deploy
 
-Imagens no Docker Hub: `shiftsad/bingus:api`, `:fetch`, `:embed`. O compose usa as imagens; o
-perfil `workers` sobe fetch e embed na mesma máquina, o embed com a GPU via toolkit da NVIDIA.
+Imagens no Docker Hub: `shiftsad/bingus:api`, `:fetch`, `:embed`. O compose usa as imagens e sabe
+construí-las do código (`docker compose --profile workers build`; nesta máquina não há login no Hub,
+então as imagens são locais). O perfil `workers` sobe fetch e embed na mesma máquina, o embed com a
+GPU via toolkit da NVIDIA.
+
+Na máquina compartilhada:
+
+- Todo serviço tem `cgroup_parent: bingus.slice`, `restart: unless-stopped` e um `mem_limit` próprio.
+  Os limites somam mais que 32 GB de propósito: o slice é o teto real, eles só impedem um serviço de
+  engolir os outros. Testado: estourar o slice mata só o processo de dentro.
+- `systemd/` tem o slice e dois timers do usuário: `bingus-diario` (09:10 UTC: rank, reindex do BM25
+  e vacuum) e `bingus-vigia` (a cada 10 min: pausa os fetch workers com o banco em 90 GB e retoma só o
+  que ele pausou). Instalação no cabeçalho de `systemd/bingus.slice`. Depende do linger do usuário,
+  ativado, senão tudo morre quando as sessões fecham.
+- `.env` daqui, além do que vem abaixo: `BINGUS_PG_DATA=/home/sadness/bingus-data/pg`,
+  `BINGUS_HF_CACHE=/home/sadness/.cache/bingus-hf`, `BINGUS_DATA=/mnt/hdd/bingus` (vira `/data` na
+  API), `BINGUS_FETCH_REPLICAS=4`, `BINGUS_FETCH_HOSTS=150`, `BINGUS_MCP_HOSTS`, binds em `10.10.0.50`
+  portas 2026 (API) e 2027 (web), Postgres em `127.0.0.1:5432`. A porta 8080 já é usada por outro
+  serviço da máquina.
+- O diretório de dados do Postgres precisa de permissão 755 no host: com 700 o usuário `postgres` do
+  container, mapeado num subuid, não entra e o container reinicia em loop.
+- Postgres com `shared_buffers` 8 GB, `effective_cache_size` 20 GB, `synchronous_commit=off` (uma
+  queda perde segundos que o crawler refaz) e `shm_size` 2 GB.
+
+Deploy no dedicado antigo:
 
 `.env` de produção: `POSTGRES_*`, `DATABASE_URL` com `postgres` como host, `BINGUS_API_KEYS` com
 uma chave por worker, `BINGUS_FETCH_KEY` e `BINGUS_EMBED_KEY` para os workers do compose,
@@ -331,7 +395,10 @@ TABLES IN SCHEMA public TO grafana;`, datasource Postgres.
 
 ## Futuro, não fazer agora
 
-CommonCrawl, notícias, RSS, PDF, o MCP em si, reescrita da busca, sumários.
+CommonCrawl, notícias, RSS, PDF, reescrita da busca, sumários. Separar de `pages` o que muda a
+cada visita (`next_check_at`, `rank` e afins): são colunas indexadas, então toda revisita e todo
+PageRank inserem a linha de novo nos sete índices, BM25 incluído. Deve explicar boa parte do inchaço
+do índice bm25. `gpu-unlock` (dobra BF16 na 3060 Ti) só age no boot, e a máquina não reinicia.
 
 ## Verificado no container
 
