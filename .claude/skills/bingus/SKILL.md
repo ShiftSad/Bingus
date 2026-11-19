@@ -492,6 +492,15 @@ Na máquina compartilhada:
   rootless entrega as conexões da porta publicada vindas de 172.19.0.1, então o `trust` do
   pg_hba para 127.0.0.1 não vale para quem vem de fora: tudo pede senha. O Postgres tem
   `stop_grace_period: 2m`: com `checkpoint_timeout` de 30 min, os 10 s padrão acabavam em SIGKILL.
+- Tudo do banco fica no NVMe. Testado em 19/11: a tabela `pages` num tablespace no HD (índices no
+  NVMe) fez cada busca BM25 levar minutos, porque o scan lê milhares de blocos das linhas e do TOAST,
+  onde mora o vetor `bm25`. As buscas seguravam locks de buffer e travavam a ingestão. O scan do
+  `vchord_bm25` não atende `pg_cancel_backend` nem `pg_terminate_backend`; só `kill -9` no
+  processo, e o Postgres faz uma recuperação curta. O TOAST não vai sozinho para outro tablespace,
+  porque é catálogo do sistema. Por página com texto são ~2,7 KB de texto comprimido, ~2,7 KB de
+  vetor BM25 e ~0,4 KB de links. Tirar só o texto para o HD pouparia ~20% do banco. Em média, cada
+  página nova custa ~7,5 KB, então os 90 GB da vigia comportam umas 10 milhões de páginas com texto.
+  `max_wal_size` é 4 GB: com 16 GB, o WAL ocupava 16 GB parados.
 - Grafana no compose (`grafana/provisioning`): datasource com o usuário `grafana` só de leitura,
   dashboard `grafana/bingus.json` como home, anônimo como Viewer porque só a WireGuard alcança.
   O dashboard pedia o plugin `grafana-postgres-datasource`; o id real é `grafana-postgresql-datasource`.

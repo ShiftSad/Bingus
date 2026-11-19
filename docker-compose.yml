@@ -31,7 +31,7 @@ services:
       - -c
       - work_mem=64MB
       - -c
-      - max_wal_size=16GB
+      - max_wal_size=4GB  # 16 GB deixava 16 GB de WAL parados no NVMe
       - -c
       - checkpoint_timeout=30min
       # Uma queda perde os últimos segundos de ingestão, que o crawler refaz. Nunca corrompe.
