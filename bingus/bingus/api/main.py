@@ -41,4 +41,7 @@ app.mount("/", SearchKeyGate(tools.app))
 
 
 def main() -> None:
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))
+    # Keep-alive acima dos 15 s de envio dos workers: com os 5 s padrão, o worker às vezes
+    # reaproveitava uma conexão no instante em que o servidor a fechava ("Server disconnected").
+    port = int(os.environ.get("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port, timeout_keep_alive=75)
