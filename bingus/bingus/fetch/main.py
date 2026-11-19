@@ -25,6 +25,7 @@ MAX_BYTES = 5 * 1024 * 1024
 MAX_SITEMAPS = 5
 MAX_SITEMAP_URLS = 2000
 ROBOTS_BLOCKED = 999  # status inventado: a API marca a página como morta
+MAX_PENDING = 1000  # hosts prontos guardados enquanto a API não responde
 LOC = re.compile(r"<loc>\s*(.*?)\s*</loc>", re.I | re.S)
 # lxml em várias threads ao mesmo tempo dá segfault. Uma thread só para extrair.
 EXTRACT = ThreadPoolExecutor(max_workers=1)
@@ -91,7 +92,9 @@ class Worker:
                 )
                 log.info("%d hosts, %d pages, %d sitemap urls", len(results), len(pages), len(urls))
             except Exception as e:
-                log.warning("results failed: %s", e)
+                # Guarda para o próximo envio. Lease vencida só faz outro worker repetir o host.
+                self.done = results[-MAX_PENDING:] + self.done
+                log.warning("results failed, %d hosts kept: %s", len(self.done), e)
 
     async def crawl_host(self, h: dict[str, Any]) -> dict[str, Any]:
         host, delay, robots = h["host"], h["crawl_delay"], h["robots"]
