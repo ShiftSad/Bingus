@@ -169,7 +169,11 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
 - Trabalho em lotes grandes. O worker pega o lote, resolve tudo, devolve tudo de uma vez.
 - Lease de fetch é por host, não por URL. A API nunca entrega o mesmo host a dois workers.
   Dentro do lote o worker respeita `crawl_delay` do host e roda hosts em paralelo.
-- Prazo do lease é proporcional ao lote. Expirou, o host volta para a fila.
+- Cada host tem no máximo 60 s de relógio por lote (`HOST_BUDGET`, robots e sitemaps inclusos): o
+  worker para ao estourar e o resto fica na fila. A API dimensionava o lote só pelo `crawl_delay`,
+  sem o tempo de download, e um host segurava o slot por 2 a 4 minutos.
+- Lease fixa de 3 minutos (`LEASE_SECONDS`): orçamento, o download em curso e o próximo envio.
+  Expirou, o host volta para a fila. Antes crescia com o `crawl_delay` e chegava a 50 minutos.
 - O worker mantém `BINGUS_HOSTS` hosts em voo o tempo todo: cada host libera o slot ao
   terminar, e hosts novos são pedidos em lotes de um quarto do total. Resultados prontos vão
   juntos num `POST /fetch/results` a cada `BINGUS_FLUSH` segundos, padrão 15, porque um POST por
@@ -180,9 +184,9 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
   novo quase todo host tem uma URL e custa um robots.txt: com 40 hosts em voo o worker ficava ocioso,
   150 é o valor desta máquina.
 - `docker stop` (SIGTERM) faz o worker enviar o que está pronto e devolver os hosts em voo em
-  `POST /fetch/release`, com `stop_grace_period` de 30 s. Sem isso, cada deploy deixava centenas de
-  hosts alugados por até 50 minutos (a lease é `60 + 300 * crawl_delay` segundos) e o worker novo
-  ficava em "no work". No Windows não há sinal: a lease vence sozinha.
+  `POST /fetch/release`, com `stop_grace_period` de 30 s. A devolução vem antes do envio, para um
+  envio que falha não impedi-la. Sem isso, cada deploy deixava centenas de hosts alugados e o worker
+  novo ficava em "no work". No Windows não há sinal: a lease vence sozinha em 3 minutos.
 - Envio que falha volta para a fila do worker e vai no próximo flush, até 1000 hosts guardados.
   A API repete o lote inteiro até cinco vezes em deadlock e grava hosts e páginas em ordem de host,
   o que reduz os deadlocks entre workers e o seed.
