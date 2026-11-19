@@ -3325,7 +3325,7 @@
                       "spec": {
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT ((SELECT greatest(reltuples, 0) FROM pg_class WHERE relname = 'chunks') - (SELECT greatest(reltuples, 0) FROM pg_class WHERE relname = 'chunks_pending'))::bigint AS value"
+                        "rawSql": "SELECT ((SELECT greatest(reltuples, 0) FROM pg_class WHERE relname = 'chunks_pkey') - (SELECT greatest(reltuples, 0) FROM pg_class WHERE relname = 'chunks_pending'))::bigint AS value"
                       }
                     },
                     "refId": "A",
@@ -3406,7 +3406,7 @@
                       "spec": {
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT 100.0 * ((SELECT greatest(reltuples, 0) FROM pg_class WHERE relname = 'chunks') - (SELECT greatest(reltuples, 0) FROM pg_class WHERE relname = 'chunks_pending')) / nullif((SELECT greatest(reltuples, 0) FROM pg_class WHERE relname = 'chunks'), 0) AS value"
+                        "rawSql": "SELECT 100.0 * ((SELECT greatest(reltuples, 0) FROM pg_class WHERE relname = 'chunks_pkey') - (SELECT greatest(reltuples, 0) FROM pg_class WHERE relname = 'chunks_pending')) / nullif((SELECT greatest(reltuples, 0) FROM pg_class WHERE relname = 'chunks_pkey'), 0) AS value"
                       }
                     },
                     "refId": "A",
