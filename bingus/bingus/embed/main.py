@@ -16,7 +16,7 @@ log = logging.getLogger("bingus.embed")
 
 MODEL = os.environ.get("BINGUS_EMBED_MODEL", "perplexity-ai/pplx-embed-v1-0.6b")
 DIMS = 512  # Matryoshka: metade do modelo, metade do armazenamento
-TOKENS = int(os.environ.get("BINGUS_EMBED_TOKENS", "2048"))
+TOKENS = int(os.environ.get("BINGUS_EMBED_TOKENS", "512"))  # casa com CHUNK_CHARS
 BATCH = int(os.environ.get("BINGUS_EMBED_BATCH", "8"))  # chunks por passada na GPU
 LEASE = int(os.environ.get("BINGUS_EMBED_LEASE", "64"))  # chunks por lote da API; 0 = só queries
 PORT = int(os.environ.get("BINGUS_EMBED_PORT", "8100"))  # queries de busca

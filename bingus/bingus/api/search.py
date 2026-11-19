@@ -5,6 +5,7 @@ import math
 import os
 import re
 import time
+import unicodedata
 from collections import Counter
 
 import asyncpg
@@ -14,17 +15,40 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from bingus.api import db
 from bingus.api.deps import search_key
 from bingus.api.page import ensure_summary
+from bingus.common.hashing import url_hash
 
 log = logging.getLogger("bingus.search")
 router = APIRouter()
 
 EMBED_URL = os.environ.get("BINGUS_EMBED_URL", "http://localhost:8100")
 CANDIDATES = 200  # por lado antes da fusão; é o máximo que a paginação alcança
+VECTOR_CHUNKS = 400  # chunks de 1700 caracteres: umas 3 por página, então mais que CANDIDATES
 RRF_K = 60
 FRESH_WEIGHT = 0.5  # bônus máximo, em frações de uma primeira posição da fusão
 FRESH_DAYS = 60  # a cada tanto o bônus cai por e
 RANK_WEIGHT = 0.5  # PageRank pesa metade de BM25 e vetorial: autoridade não é relevância
 MAX_PER_HOST = 2  # um site ocupa no máximo isso antes de os outros aparecerem
+# Palavras da busca no título ou na URL, sem acento e com números inteiros: o tokenizador do BM25
+# quebra "5060" em dígitos e "custo-benefício" em tokens diferentes de "custo benefício". Vale até
+# uma primeira posição. Medido em 40 buscas nerd: nDCG@10 0,42 -> 0,55 sozinho.
+TITLE_WEIGHT = 1.0
+STOPWORDS = set(
+    "a o as os um uma de da do das dos em no na nos nas para pra por com sem e ou que como qual"
+    " quais é ser se ao aos à às the of to in for and on how what".split()
+)
+# Recência só quando a busca pede: com o índice todo novo, o bônus em toda busca era ruído.
+FRESH_WORDS = set(
+    "hoje agora noticia noticias novo nova novos novas lancamento lancamentos ultimo ultima"
+    " ultimos ultimas recente recentes semana anuncia anunciado anunciada news latest".split()
+)
+# Tag, perfil, autor, categoria e busca interna: quase sempre lixo no topo. Paginação não entra:
+# /page/N também é tópico de fórum, que costuma ser bom.
+LOW_VALUE = re.compile(
+    r"/(tags?|categoria|categorias|category|categories|profile|perfil|author|autor|autores"
+    r"|discover|busca|search|arquivo|archive)(/|$)|[?&](s|q|search|busca)=",
+    re.I,
+)
+LOW_VALUE_FACTOR = 0.5
 SNIPPET = 300
 BURST = 20  # token bucket por IP: aguenta rajada de 20...
 REFILL = 1.0  # ...e recarrega um por segundo
@@ -46,7 +70,21 @@ SELECT page_id, start_ch, end_ch, embedding <=> quantize_to_rabitq8($1::vector) 
 FROM chunks ORDER BY dist LIMIT $2
 """
 
-META = "SELECT id, host, content_hash, rank, published_at FROM pages WHERE id = ANY($1)"
+META = """
+SELECT id, url, title, host, content_hash, rank, published_at FROM pages WHERE id = ANY($1)
+"""
+# Busca curta que é o nome de um site ("tabnews", "radargpu", "clube do hardware fórum"): a raiz
+# dele vai para o topo, mesmo sendo um hub sem texto, que nem o BM25 nem o vetorial enxergam.
+NAVIGATIONAL = """
+WITH h AS (
+    SELECT host, split_part(regexp_replace(host, '^www\\.', ''), '.', 1) AS label, page_count
+    FROM hosts WHERE NOT blocked AND pt_count > 0
+)
+SELECT host FROM h
+WHERE $1 LIKE label || '%' AND length(label) >= greatest(4, 0.6 * length($1))
+ORDER BY page_count DESC LIMIT 1
+"""
+ROOT_PAGE = "SELECT id FROM pages WHERE url_hash = ANY($1) AND content_hash IS NOT NULL LIMIT 1"
 EMBEDDED = "SELECT DISTINCT page_id FROM chunks WHERE page_id = ANY($1) AND embedding IS NOT NULL"
 PAGES = """
 SELECT id, url, host, title, text, summary, content_hash, rank, published_at
@@ -63,19 +101,22 @@ async def search(
     summaries: bool = True,
     format: str | None = None,
     pageno: int = 1,
+    boosts: bool = True,
 ):
     """Hybrid search: BM25 on pages and vectors on chunks, fused with reciprocal rank fusion.
 
     summaries=false skips the LLM: stored summaries still come back, missing ones stay null.
     format=json answers like SearXNG (pageno pages), which Open WebUI, LangChain and friends
     already speak: pointing them at Bingus as if it were a SearXNG is enough.
+    boosts=false turns off title/URL, navigational and low-value adjustments and applies recency
+    to every query, the fusion before them: for A/B evaluation.
     """
     if not allow(client_ip(request)):
         raise HTTPException(429, "Muitas buscas. Espere um pouco.")
     if format == "json":
-        res = await run_search(q, limit, offset or (max(pageno, 1) - 1) * limit, False)
+        res = await run_search(q, limit, offset or (max(pageno, 1) - 1) * limit, False, boosts)
         return searxng(res)
-    return await run_search(q, limit, offset, summaries)
+    return await run_search(q, limit, offset, summaries, boosts)
 
 
 def searxng(res: dict) -> dict:
@@ -104,7 +145,9 @@ def searxng(res: dict) -> dict:
     }
 
 
-async def run_search(q: str, limit: int = 10, offset: int = 0, summaries: bool = True) -> dict:
+async def run_search(
+    q: str, limit: int = 10, offset: int = 0, summaries: bool = True, boosts: bool = True
+) -> dict:
     """The search itself, without the per-IP rate limit. The MCP calls this directly."""
     q = q.strip()
     timer = Timer()
@@ -136,11 +179,12 @@ async def run_search(q: str, limit: int = 10, offset: int = 0, summaries: bool =
     if len(warnings) == 2:
         raise HTTPException(503, "Busca indisponível: banco e embed worker fora do ar.")
     if vec:
-        for r in await pool.fetch(VECTOR, vec, CANDIDATES):
+        for r in await pool.fetch(VECTOR, vec, VECTOR_CHUNKS):
             best_chunk.setdefault(r["page_id"], (r["start_ch"], r["end_ch"]))
     timer.lap("vector")
     semantic = list(best_chunk)
-    candidates = list(dict.fromkeys(lexical + semantic))
+    nav = await navigational(pool, q) if boosts else None
+    candidates = list(dict.fromkeys(([nav] if nav else []) + lexical + semantic))
     if not candidates:
         return {
             "query": q,
@@ -165,11 +209,27 @@ async def run_search(q: str, limit: int = 10, offset: int = 0, summaries: bool =
         for position, page_id in enumerate(lexical):
             if page_id not in embedded:
                 scores[page_id] += 1 / (RRF_K + position)
+    terms = [t for t in words(q) if t not in STOPWORDS] if boosts else []
+    fresh = not boosts or any(t in FRESH_WORDS or re.fullmatch(r"20\d\d", t) for t in terms)
     today = dt.date.today()
-    for page_id in candidates:  # bônus por recência: vale meia primeira posição e decai em meses
-        if meta[page_id]["published_at"]:
-            age = (today - meta[page_id]["published_at"]).days
+    found = {i: set(words(f"{meta[i]['title'] or ''} {meta[i]['url']}")) for i in candidates}
+    # Termo raro entre os candidatos pesa mais: "gta" e "6" mais que "requisitos" ou "vale".
+    n = len(candidates)
+    weight = {t: math.log(1 + n / (1 + sum(t in f for f in found.values()))) for t in terms}
+    total = sum(weight.values()) or 1
+    for page_id in candidates:
+        m = meta[page_id]
+        scores.setdefault(page_id, 0.0)
+        if terms:
+            matched = sum(w for t, w in weight.items() if t in found[page_id])
+            scores[page_id] += TITLE_WEIGHT / RRF_K * matched / total
+        if fresh and m["published_at"]:  # vale meia primeira posição e decai em meses
+            age = (today - m["published_at"]).days
             scores[page_id] += FRESH_WEIGHT / RRF_K * math.exp(-max(age, 0) / FRESH_DAYS)
+        if boosts and LOW_VALUE.search(m["url"]):
+            scores[page_id] *= LOW_VALUE_FACTOR
+    if nav:
+        scores[nav] = max(scores.values()) + 1 / RRF_K
 
     ordered, overflow = [], []
     seen: set[bytes] = set()  # mesma página em URLs diferentes aparece uma vez
@@ -179,7 +239,7 @@ async def run_search(q: str, limit: int = 10, offset: int = 0, summaries: bool =
         if m["content_hash"] in seen:
             continue
         seen.add(m["content_hash"])
-        per_host[m["host"]] += 1
+        per_host[m["host"]] += page_id != nav  # a raiz navegacional não gasta a cota do site
         (ordered if per_host[m["host"]] <= MAX_PER_HOST else overflow).append(page_id)
     ordered += overflow
     chosen = ordered[offset : offset + limit]
@@ -286,6 +346,24 @@ async def embed_query(q: str) -> str | None:
         query_vectors.clear()
     query_vectors[key] = (time.monotonic() + QUERY_CACHE_TTL, vec)
     return vec
+
+
+def words(text: str) -> list[str]:
+    """Lowercase terms without accents; numbers stay whole and hyphens split words."""
+    plain = unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
+    return re.findall(r"[a-z0-9]+", plain)
+
+
+async def navigational(pool: asyncpg.Pool, q: str) -> int | None:
+    """Id of a site's root page when a short query is that site's name."""
+    parts = words(q)
+    if not 1 <= len(parts) <= 4:
+        return None
+    host = await pool.fetchval(NAVIGATIONAL, "".join(parts))
+    if not host:
+        return None
+    roots = [url_hash(f"{scheme}://{host}/") for scheme in ("https", "http")]
+    return await pool.fetchval(ROOT_PAGE, roots)
 
 
 def snippet(text: str | None, q: str, chunk: tuple[int, int] | None) -> str | None:

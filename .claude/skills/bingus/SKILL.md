@@ -71,7 +71,13 @@ similaridade por cosseno, sem prefixo de instrução, contexto 32K.
 - Truncar para 512 dims. Enviar int8 cru, 512 bytes por vetor.
 - fp16 dá NaN neste modelo. bf16 em Ampere ou mais nova, fp32 na 1050 Ti, escolhido sozinho.
   A saída do modelo já é int8, entregue como float32 com valores inteiros.
-- 2048 tokens por chunk, batch 8 na 1050 Ti. `BINGUS_EMBED_TOKENS` e `BINGUS_EMBED_BATCH`.
+- 512 tokens por chunk de 1700 caracteres (`CHUNK_CHARS` em `common/text.py`), batch 8.
+  `BINGUS_EMBED_TOKENS` e `BINGUS_EMBED_BATCH`. Medido em 2765 páginas de produção e 630 queries
+  (scratchpad do agente de 2026-11-19): chunk de 1700 com 512 tokens ganha do de 7000 com 2048 em
+  trecho do meio/fim da página (MRR@10 0,732 contra 0,589, R@10 0,896 contra 0,754), empata em
+  título e embeda 26% mais páginas por segundo; custa uns 3,2 chunks por página em vez de 1,3.
+  Truncar o chunk de 7000 em 512 tokens perdia o que vem depois do começo (MRR 0,500). Na troca,
+  os chunks pendentes de 7000 foram refeitos; os já embedados ficaram como estavam.
   `BINGUS_EMBED_LEASE` é quantos chunks pega da API por vez; 256 mantém a GPU sem vales.
 - O worker ordena o lote alugado por tamanho antes de dividir em passadas: cada passada é preenchida
   até o maior texto dela, e em ordem aleatória quase toda passada pagava 2048 tokens. Medido na 3060
@@ -121,7 +127,7 @@ Regras:
 - Simhash por chunk. Só reembeda se a distância de Hamming passar de 3 bits. A coluna guarda o
   simhash do texto que foi embedado e só muda quando o embedding é refeito. Assim pequenas
   mudanças acumuladas não passam despercebidas.
-- Chunk de cerca de 2048 tokens, medido em caracteres no `common`. 99% das páginas cabem em um.
+- Chunk de 1700 caracteres, cerca de 512 tokens, cortado em parágrafo ou frase no `common`.
 - Profundidade máxima 5. Passou disso, quase sempre é erro ou spam.
 - Não existe teto real por host. `max_pages` é válvula contra sites infinitos, padrão 1 milhão,
   e só se ajusta para baixo. Quem regula é a prioridade: ao devolver um lote, o host espera
@@ -250,6 +256,13 @@ frontend e o MCP chamam. Híbrida:
 - Fusão por Reciprocal Rank Fusion com k = 60 sobre três listas: BM25, vetorial e os mesmos
   candidatos ordenados por `pages.rank`. O PageRank pesa metade (`RANK_WEIGHT`): com peso cheio, ser o
   primeiro em autoridade valia o mesmo que ser o primeiro em relevância.
+- Ajustes depois da fusão, medidos num A/B às cegas com 40 buscas nerd (nDCG@10 0,471 -> 0,691,
+  top1 bom 0,28 -> 0,60): bônus de até uma primeira posição pelas palavras da busca no título ou
+  na URL, sem acento e com números inteiros (o tokenizador do BM25 quebra "5060" em dígitos),
+  cada termo pesado pela raridade entre os candidatos; recência só quando a busca pede (notícia,
+  hoje, lançamento, novo, ano); metade da nota para tag, perfil, autor, categoria e busca interna;
+  busca curta que é o nome de um site põe a raiz dele em primeiro, mesmo sendo hub.
+  `boosts=false` desliga os ajustes, para comparar. Vetorial busca 400 chunks (uns 3 por página).
 - Diversidade: um site ocupa no máximo `MAX_PER_HOST`, 2, posições antes de os outros aparecerem; o
   excesso vai para o fim da lista, não some. Com a Wikipédia inteira no índice a busca virava uma busca
   da Wikipédia, e não é essa a graça.
