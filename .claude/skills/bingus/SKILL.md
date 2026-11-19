@@ -143,7 +143,9 @@ Regras:
   novos passam na frente dos outros novos; host com três páginas fora dos idiomas dele e nenhuma
   dentro é bloqueado e sua frontier apagada; sitemaps só são lidos a partir da primeira página
   aceita do host; redes sociais e afins são descartadas já na normalização da URL, lista em
-  `common/urls.py`. `pt_count` conta páginas aceitas em qualquer idioma do host.
+  `common/urls.py`, e também host que não é domínio (`VALID_HOST`: sem ponto, com espaço, `%`,
+  telefone; eram 0,9% dos hosts, nenhum com texto). `pt_count` conta páginas aceitas em qualquer
+  idioma do host.
 - `published_at` vem da data que o extrator acha na página. A busca dá um bônus por recência
   que vale até meia primeira posição e decai por e a cada 60 dias, constantes em `search.py`.
 - Página com menos de 200 caracteres de texto extraído é um hub, tipo home de portal: fica sem
@@ -350,8 +352,10 @@ sobrescrevendo `DATABASE_URL` para `localhost`.
 ## PageRank
 
 `bingus-rank`, em `bingus/api/rank.py`. Processo à parte, cron diário: `docker compose exec api
-bingus-rank`. Carrega páginas e links do Postgres por `COPY` direto em numpy, resolve os hashes de
-destino por busca binária, monta matriz esparsa em scipy e roda 20 iterações com amortecimento
+bingus-rank`. Carrega páginas e links do Postgres por `COPY` direto em numpy, as duas leituras na
+mesma transação `REPEATABLE READ` (com o crawler gravando entre elas, links de páginas novas caíam
+fora da matriz e o rank morria), resolve os hashes de destino por busca binária, monta matriz
+esparsa em scipy e roda 20 iterações com amortecimento
 0.85 e tratamento de páginas sem links. Grava `pages.rank` e `hosts.rank` com média 1. Páginas de
 redirect guardam o destino em `out_links` para repassar rank. Em 11 mil páginas leva 6 s; em 10
 milhões estima-se minutos e uns 12 GB de RAM no pico.
