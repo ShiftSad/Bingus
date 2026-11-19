@@ -302,7 +302,8 @@ com menos prioridade. O MCP é para um servidor de amigos nerds: o nicho bom pri
   O cooldown entre lotes é dividido por `1 + priority`.
 - `POST /fetch/seed` aceita `priority`. Os sites do dono têm 10: radardehardware.com.br, que
   redireciona para radargpu.com.br, e os irmãos radarcpu, radarram, radarautos (HTML estático,
-  robots libera tudo menos `/comparar/livre/`, sitemap em `/sitemap-index.xml`).
+  robots libera tudo menos `/comparar/livre/`, sitemap em `/sitemap-index.xml`). Também
+  vrosa.com.br e vozport.com, com `langs` {pt,en} porque o vozport tem versão em inglês em `/en/`.
 - Crawl focado simples: um host ainda nunca visitado, linkado de um host com prioridade p, nasce
   com p - 2 (`PRIORITY_DECAY`). Só nesses o insert usa DO UPDATE, que trava a linha; para os demais,
   DO NOTHING, porque hosts populares eram fonte de deadlock.
