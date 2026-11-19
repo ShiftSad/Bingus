@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "bingus": {
+      "type": "http",
+      "url": "http://10.10.0.50:2026/mcp"
+    }
+  }
+}
