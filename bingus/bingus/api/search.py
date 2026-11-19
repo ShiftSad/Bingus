@@ -5,6 +5,7 @@ import math
 import os
 import re
 import time
+from collections import Counter
 
 import asyncpg
 import httpx
@@ -21,6 +22,8 @@ CANDIDATES = 200  # por lado antes da fusão; é o máximo que a paginação alc
 RRF_K = 60
 FRESH_WEIGHT = 0.5  # bônus máximo, em frações de uma primeira posição da fusão
 FRESH_DAYS = 60  # a cada tanto o bônus cai por e
+RANK_WEIGHT = 0.5  # PageRank pesa metade de BM25 e vetorial: autoridade não é relevância
+MAX_PER_HOST = 2  # um site ocupa no máximo isso antes de os outros aparecerem
 SNIPPET = 300
 BURST = 20  # token bucket por IP: aguenta rajada de 20...
 REFILL = 1.0  # ...e recarrega um por segundo
@@ -42,7 +45,7 @@ SELECT page_id, start_ch, end_ch, embedding <=> quantize_to_rabitq8($1::vector) 
 FROM chunks ORDER BY dist LIMIT $2
 """
 
-META = "SELECT id, content_hash, rank, published_at FROM pages WHERE id = ANY($1)"
+META = "SELECT id, host, content_hash, rank, published_at FROM pages WHERE id = ANY($1)"
 PAGES = """
 SELECT id, url, host, title, text, summary, content_hash, rank, published_at
 FROM pages WHERE id = ANY($1)
@@ -107,21 +110,26 @@ async def search(
     by_rank = sorted(candidates, key=lambda i: -meta[i]["rank"])  # PageRank como terceira lista
 
     scores: dict[int, float] = {}
-    for ranking in (lexical, semantic, by_rank):
+    for ranking, weight in ((lexical, 1.0), (semantic, 1.0), (by_rank, RANK_WEIGHT)):
         for position, page_id in enumerate(ranking):
-            scores[page_id] = scores.get(page_id, 0) + 1 / (RRF_K + position)
+            scores[page_id] = scores.get(page_id, 0) + weight / (RRF_K + position)
     today = dt.date.today()
     for page_id in candidates:  # bônus por recência: vale meia primeira posição e decai em meses
         if meta[page_id]["published_at"]:
             age = (today - meta[page_id]["published_at"]).days
             scores[page_id] += FRESH_WEIGHT / RRF_K * math.exp(-max(age, 0) / FRESH_DAYS)
 
-    ordered = []
+    ordered, overflow = [], []
     seen: set[bytes] = set()  # mesma página em URLs diferentes aparece uma vez
+    per_host: Counter[str] = Counter()  # o excesso de um site vai para o fim, não some
     for page_id in sorted(scores, key=lambda i: -scores[i]):
-        if meta[page_id]["content_hash"] not in seen:
-            seen.add(meta[page_id]["content_hash"])
-            ordered.append(page_id)
+        m = meta[page_id]
+        if m["content_hash"] in seen:
+            continue
+        seen.add(m["content_hash"])
+        per_host[m["host"]] += 1
+        (ordered if per_host[m["host"]] <= MAX_PER_HOST else overflow).append(page_id)
+    ordered += overflow
     chosen = ordered[offset : offset + limit]
     timer.lap("fusion")
     pages = {r["id"]: r for r in await pool.fetch(PAGES, chosen)}
