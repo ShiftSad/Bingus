@@ -72,6 +72,10 @@ class FetchResults(BaseModel):
     urls: list[str] = []  # achadas em sitemaps
 
 
+class Release(BaseModel):
+    hosts: list[str]
+
+
 class Seed(BaseModel):
     urls: list[str]
     langs: list[str] | None = None  # idiomas aceitos nos hosts dessas URLs, ex. ["pt", "en"]
@@ -255,6 +259,18 @@ async def save_results(body: FetchResults, name: str) -> None:
             await conn.execute(RELEASE_HOST, host)
         ms = int((time.monotonic() - started) * 1000)
         await metrics.record_batch(conn, name, ms, outcomes, added, queued)
+
+
+@router.post("/release")
+async def release(body: Release, name: str = Depends(worker)):
+    """Hosts that a stopping worker will not finish go back to the queue right away.
+
+    Without this, a restart left them leased for up to 50 minutes and the new worker sat idle.
+    """
+    async with db.pool().acquire() as conn, conn.transaction():
+        for host in sorted(body.hosts):
+            await conn.execute(RELEASE_HOST, host)
+    return {"released": len(body.hosts)}
 
 
 @router.post("/seed")

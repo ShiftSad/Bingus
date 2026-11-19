@@ -3,6 +3,7 @@ import gzip
 import logging
 import os
 import re
+import signal
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from urllib.robotparser import RobotFileParser
@@ -39,6 +40,7 @@ class Worker:
             headers={"User-Agent": UA}, timeout=TIMEOUT, follow_redirects=True, max_redirects=5
         )
         self.tasks: set[asyncio.Task[None]] = set()  # um por host em voo
+        self.flying: set[str] = set()  # hosts alugados ainda não terminados
         self.freed = asyncio.Event()
         self.done: list[dict[str, Any]] = []  # hosts prontos, esperando o próximo envio
 
@@ -70,9 +72,14 @@ class Worker:
                 task.add_done_callback(self.tasks.discard)
 
     async def crawl(self, h: dict[str, Any]) -> None:
+        self.flying.add(h["host"])
         try:
             self.done.append(await self.crawl_host(h))
+            self.flying.discard(h["host"])
+        except asyncio.CancelledError:
+            raise  # continua em flying: o desligamento devolve o host
         except Exception as e:
+            self.flying.discard(h["host"])
             log.warning("%s failed: %s", h["host"], e)
         finally:
             self.freed.set()
@@ -83,18 +90,33 @@ class Worker:
             results, self.done = self.done, []
             if not results:
                 continue
-            pages = [p for r in results for p in r["pages"]]
-            hosts = {r["host"]: r["info"] for r in results if r["info"]}
-            urls = [u for r in results for u in r["urls"]]
             try:
-                await self.api.post_json(
-                    "/fetch/results", {"pages": pages, "hosts": hosts, "urls": urls}
-                )
-                log.info("%d hosts, %d pages, %d sitemap urls", len(results), len(pages), len(urls))
+                await self.send(results)
             except Exception as e:
                 # Guarda para o próximo envio. Lease vencida só faz outro worker repetir o host.
                 self.done = results[-MAX_PENDING:] + self.done
                 log.warning("results failed, %d hosts kept: %s", len(self.done), e)
+
+    async def send(self, results: list[dict[str, Any]]) -> None:
+        pages = [p for r in results for p in r["pages"]]
+        hosts = {r["host"]: r["info"] for r in results if r["info"]}
+        urls = [u for r in results for u in r["urls"]]
+        await self.api.post_json("/fetch/results", {"pages": pages, "hosts": hosts, "urls": urls})
+        log.info("%d hosts, %d pages, %d sitemap urls", len(results), len(pages), len(urls))
+
+    async def shutdown(self) -> None:
+        """docker stop: envia o que está pronto e devolve os hosts em voo, dentro do prazo."""
+        for task in list(self.tasks):
+            task.cancel()
+        await asyncio.gather(*self.tasks, return_exceptions=True)
+        try:
+            if self.done:
+                await self.send(self.done)
+            if self.flying:
+                await self.api.post_json("/fetch/release", {"hosts": sorted(self.flying)})
+            log.info("stopped, %d hosts released", len(self.flying))
+        except Exception as e:
+            log.warning("shutdown failed: %s", e)
 
     async def crawl_host(self, h: dict[str, Any]) -> dict[str, Any]:
         host, delay, robots = h["host"], h["crawl_delay"], h["robots"]
@@ -225,6 +247,16 @@ def main() -> None:
     async def run() -> None:
         log.info("%s: %d hosts in flight, results every %ds", INSTANCE, HOSTS, FLUSH)
         worker = Worker(api, stats)
-        await asyncio.gather(worker.run(), worker.flush(), stats.run(api))
+        stop = asyncio.Event()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            try:
+                asyncio.get_running_loop().add_signal_handler(sig, stop.set)
+            except NotImplementedError:  # Windows: sem desligamento limpo, a lease vence sozinha
+                pass
+        loops = [asyncio.create_task(c) for c in (worker.run(), worker.flush(), stats.run(api))]
+        await stop.wait()
+        for task in loops:
+            task.cancel()
+        await worker.shutdown()
 
     asyncio.run(run())

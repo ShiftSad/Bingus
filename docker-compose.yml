@@ -89,6 +89,7 @@ services:
     restart: unless-stopped
     cgroup_parent: bingus.slice
     mem_limit: 2g
+    stop_grace_period: 30s  # envia o que está pronto e devolve os hosts em voo
     command: bingus-fetch
     environment:
       PYTHONUNBUFFERED: 1

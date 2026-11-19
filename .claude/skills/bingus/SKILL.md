@@ -179,6 +179,10 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
   Throughput se ajusta em `BINGUS_HOSTS`, não em URLs por host; extração é uma thread só. Num crawl
   novo quase todo host tem uma URL e custa um robots.txt: com 40 hosts em voo o worker ficava ocioso,
   150 é o valor desta máquina.
+- `docker stop` (SIGTERM) faz o worker enviar o que está pronto e devolver os hosts em voo em
+  `POST /fetch/release`, com `stop_grace_period` de 30 s. Sem isso, cada deploy deixava centenas de
+  hosts alugados por até 50 minutos (a lease é `60 + 300 * crawl_delay` segundos) e o worker novo
+  ficava em "no work". No Windows não há sinal: a lease vence sozinha.
 - Envio que falha volta para a fila do worker e vai no próximo flush, até 1000 hosts guardados.
   A API repete o lote inteiro até cinco vezes em deadlock e grava hosts e páginas em ordem de host,
   o que reduz os deadlocks entre workers e o seed.
