@@ -14,6 +14,9 @@ log = logging.getLogger("bingus.rank")
 
 DAMPING = 0.85
 ITERATIONS = 20
+# Só grava rank que mudou mais que isso. Quase todo rank muda um pouco a cada rodada, e cada UPDATE
+# em pages é uma linha nova mais uma entrada em cada índice, BM25 incluso: 11 GB de NVMe por rodada.
+RANK_TOLERANCE = 0.05
 
 
 async def stream(conn: asyncpg.Connection, sql: str, cols: int, each) -> None:
@@ -101,9 +104,11 @@ async def run() -> None:
     for lo in range(0, int(ids.max()) + 1, 50_000):
         await conn.execute(
             "UPDATE pages p SET rank = r.rank FROM r"
-            + " WHERE p.id = r.id AND r.id > $1 AND r.id <= $2 AND p.rank <> r.rank",
+            + " WHERE p.id = r.id AND r.id > $1 AND r.id <= $2"
+            + " AND abs(p.rank - r.rank) > $3 * p.rank",
             lo,
             lo + 50_000,
+            RANK_TOLERANCE,
         )
     for lo in range(0, int(ids.max()) + 1, 50_000):  # fila do embed segue o rank novo
         await conn.execute(

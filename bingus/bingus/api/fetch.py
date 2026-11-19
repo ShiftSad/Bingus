@@ -1,6 +1,7 @@
 import asyncio
 import datetime as dt
 import logging
+import os
 import time
 from collections import Counter
 from collections.abc import Awaitable, Callable
@@ -32,6 +33,9 @@ LEASE_SECONDS = HOST_BUDGET + 120
 MAX_FAILS = 10
 REEMBED_BITS = 3
 ROBOTS_BLOCKED = 999  # status inventado pelo worker: página morre na hora
+# Coleta focada: a lease só entrega hosts com pelo menos essa prioridade, ou semeados à mão. Com 4,
+# o foco nerd e as referências (6) e os sites linkados por eles (4); 0 desliga o filtro.
+MIN_PRIORITY = int(os.environ.get("BINGUS_MIN_PRIORITY", "0"))
 
 
 class Chunk(BaseModel):
@@ -94,6 +98,7 @@ LEASE_HOSTS = """
 WITH picked AS (
     SELECT host FROM hosts
     WHERE NOT blocked AND next_due <= now() AND (leased_until IS NULL OR leased_until < now())
+      AND (priority >= $3 OR seeded)
     ORDER BY priority DESC, seeded DESC, (page_count = 0) DESC, (host LIKE '%.br') DESC, next_due
     LIMIT $1
     FOR UPDATE SKIP LOCKED
@@ -232,7 +237,7 @@ async def batch(hosts: int = 10, per_host: int = 10, name: str = Depends(worker)
     """
     out = []
     async with db.pool().acquire() as conn, conn.transaction():
-        for h in await conn.fetch(LEASE_HOSTS, hosts, LEASE_SECONDS):
+        for h in await conn.fetch(LEASE_HOSTS, hosts, LEASE_SECONDS, MIN_PRIORITY):
             n = min(MAX_PER_HOST, max(per_host, int(h["page_count"] ** 0.5)))
             n = max(1, min(n, int(HOST_BUDGET / max(h["crawl_delay"], 1))))
             urls = []

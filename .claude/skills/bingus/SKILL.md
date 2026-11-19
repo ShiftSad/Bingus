@@ -193,8 +193,10 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
   worker fazia 2 páginas por segundo. Um host recebe no máximo 60 segundos de trabalho por lote.
   Throughput se ajusta em `BINGUS_HOSTS`, não em URLs por host; extração é uma thread só.
 - Um worker satura um núcleo (GIL: HTTP, extração e links no mesmo processo), então se escala em
-  processos. Nesta máquina eram 12 workers nativos; desde 19/11 são 4 (`bingus-fetch@1..4`), porque
-  a meta virou cobertura e não escala, ver Referências. Com 12 e 60 hosts em voo, uns 20 páginas novas por segundo
+  processos. Nesta máquina são 12 workers nativos. Desde 19/11 a coleta é focada:
+  `BINGUS_MIN_PRIORITY=4` faz a lease entregar só hosts com prioridade 4 ou mais, ou semeados à mão
+  (`fetch.py`, `MIN_PRIORITY`). Medido com o filtro: 99,8% das páginas de hosts com prioridade 6,
+  ~210 páginas/s e falha de 14%. Ver Referências. Antes, com 12 e 60 hosts em voo, uns 20 páginas novas por segundo
   no total. Extração custava 258 ms de CPU por página, 85% no `bare_extraction`; com `fast=True` do
   trafilatura caiu 2,4x, artigos idênticos, e homes de portal viram hubs.
 - Nesta máquina os fetch workers rodam fora do Docker (`systemd/bingus-fetch@.service`, venv em
@@ -403,6 +405,12 @@ milhões estima-se minutos e uns 12 GB de RAM no pico.
 Regra aprendida a caro: nunca um UPDATE só sobre a tabela `pages` inteira. Com 1,17 milhão de
 linhas ele levou 45 minutos segurando o crawler travado e morreu em deadlock com o fetch worker.
 Rank e seed gravam em lotes de 50 mil ids, cada um em transação própria.
+
+O rank roda a cada 6 horas (`bingus-diario.timer`). Com 238 milhões de links ele morria sem memória
+nos 14 GB do container da API: agora resolve os links por pedaço do COPY, direto em int32, e
+calcula o peso por página; pico de 3,9 GB com 5,7 milhões de páginas. Grava só rank que mudou mais
+de 5% (`RANK_TOLERANCE`): regravar tudo levava 63 minutos e 11 GB de NVMe por rodada, porque cada
+UPDATE em pages é linha nova e entrada nova em cada índice, o BM25 incluso.
 
 ## Seeds
 
