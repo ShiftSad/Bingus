@@ -47,10 +47,13 @@ def pagerank(n: int, src: np.ndarray, dst: np.ndarray) -> np.ndarray:
 async def run() -> None:
     started = time.time()
     conn = await asyncpg.connect(os.environ["DATABASE_URL"])
-    nodes = await load(conn, "SELECT id, url_hash FROM pages ORDER BY id", 2)
-    edges = await load(
-        conn, "SELECT id, unnest(out_links) FROM pages WHERE out_links IS NOT NULL", 2
-    )
+    # mesmo snapshot nas duas leituras: com o crawler gravando, links de páginas novas
+    # apontavam para fora da matriz
+    async with conn.transaction(isolation="repeatable_read", readonly=True):
+        nodes = await load(conn, "SELECT id, url_hash FROM pages ORDER BY id", 2)
+        edges = await load(
+            conn, "SELECT id, unnest(out_links) FROM pages WHERE out_links IS NOT NULL", 2
+        )
     ids, hashes = nodes[:, 0], nodes[:, 1]
     n = len(ids)
     log.info("%d pages, %d links, loaded in %.0fs", n, len(edges), time.time() - started)

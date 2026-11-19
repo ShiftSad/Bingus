@@ -14,6 +14,9 @@ SKIP_EXT: tuple[str, ...] = tuple(
     ).split()
 )
 MAX_LEN = 512  # mais que isso é link de rastreamento ou URL gerada, quase nunca uma página
+# Rótulos de letras (IDN incluso), dígitos e hífen, com pelo menos um ponto. Barra href com texto
+# no lugar do domínio ("http://terra/", telefone, frase com %20), que só gastava lease e DNS.
+VALID_HOST = re.compile(r"(?:[^\W_]|-)+(?:\.(?:[^\W_]|-)+)+")
 # Redes sociais e afins: sem conteúdo útil e infinitos. Depois, rastreamento de anúncios.
 BLOCKED_HOSTS = (
     "youtube.com youtu.be instagram.com facebook.com twitter.com x.com linkedin.com tiktok.com"
@@ -33,7 +36,7 @@ def normalize(url: str, base: str | None = None) -> str | None:
         port = parts.port
     except ValueError:
         return None
-    if parts.scheme not in ("http", "https") or not host:
+    if parts.scheme not in ("http", "https") or not VALID_HOST.fullmatch(host):
         return None
     if any(host == b or host.endswith("." + b) for b in BLOCKED_HOSTS):
         return None
