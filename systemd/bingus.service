@@ -1,0 +1,16 @@
+[Unit]
+Description=Bingus: liga os containers no boot, depois da WireGuard
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=%h/Bingus
+ExecStart=/bin/sh %h/Bingus/systemd/sobe.sh
+TimeoutStartSec=15min
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

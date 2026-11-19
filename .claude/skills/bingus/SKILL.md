@@ -484,6 +484,11 @@ Na máquina compartilhada:
   e vacuum) e `bingus-vigia` (a cada 10 min: pausa os fetch workers com o banco em 90 GB e retoma só o
   que ele pausou). Instalação no cabeçalho de `systemd/bingus.slice`. Depende do linger do usuário,
   ativado, senão tudo morre quando as sessões fecham.
+- Boot: Docker rootless, os 12 fetch workers e os timers sobem com o systemd do usuário, e os
+  containers têm `restart: unless-stopped`. Só que o Docker restaura os containers antes da WireGuard
+  subir, e porta publicada num IP inexistente impede o container de iniciar (testado: "cannot assign
+  requested address"). `bingus.service` roda `systemd/sobe.sh`, que espera os IPs dos `*_BIND` do
+  `.env` e faz `compose --profile workers up -d --no-recreate`: só liga o que ficou parado.
 - `.env` daqui, além do que vem abaixo: `BINGUS_PG_DATA=/home/sadness/bingus-data/pg`,
   `BINGUS_HF_CACHE=/home/sadness/.cache/bingus-hf`, `BINGUS_DATA=/mnt/hdd/bingus` (vira `/data` na
   API), `BINGUS_FETCH_REPLICAS=0` (workers nativos, ver Protocolo), `BINGUS_MCP_HOSTS`,

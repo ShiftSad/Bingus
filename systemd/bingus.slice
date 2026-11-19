@@ -1,7 +1,7 @@
 # Teto de tudo que o Bingus roda numa máquina compartilhada. Os serviços do compose entram aqui
 # por cgroup_parent, os timers por Slice=. Instalar no systemd do usuário (Docker rootless):
 #   cp systemd/* ~/.config/systemd/user/ && systemctl --user daemon-reload
-#   systemctl --user enable --now bingus-diario.timer bingus-vigia.timer
+#   systemctl --user enable --now bingus-diario.timer bingus-vigia.timer bingus.service
 # Fetch workers nativos (bingus-fetch@.service), com ~/.config/bingus/fetch.env contendo
 # BINGUS_API_URL, BINGUS_API_KEY e BINGUS_HOSTS:
 #   cd bingus && UV_PROJECT_ENVIRONMENT=~/bingus-data/fetch-venv uv sync --frozen --no-dev \
