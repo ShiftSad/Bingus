@@ -1,8 +1,8 @@
 [Unit]
-Description=Bingus: manutenção diária
+Description=Bingus: manutenção a cada 6 horas
 
 [Timer]
-OnCalendar=*-*-* 09:10:00 UTC
+OnCalendar=*-*-* 03,09,15,21:10:00 UTC
 Persistent=true
 
 [Install]
