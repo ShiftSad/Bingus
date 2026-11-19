@@ -18,11 +18,13 @@ api = [
     "scipy",
     "trafilatura",
     "py3langid",
+    "protego",
     "mcp",
 ]
 fetch = [
     "trafilatura",
     "py3langid",
+    "protego",
 ]
 embed = [
     "torch",

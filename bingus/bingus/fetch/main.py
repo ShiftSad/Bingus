@@ -6,9 +6,10 @@ import signal
 import zlib
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
-from urllib.robotparser import RobotFileParser
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
+from protego import Protego
 
 from bingus.common.client import Api
 from bingus.common.stats import INSTANCE, Stats
@@ -30,6 +31,7 @@ MAX_PENDING = 1000  # hosts prontos guardados enquanto a API não responde
 HOST_BUDGET = 60  # segundos de relógio por host em cada lote, robots e sitemaps inclusos
 SMALL_BYTES = 10 * 1024 * 1024  # robots e sitemaps: o resto do arquivo é ignorado
 SMALL_TIMEOUT = 20  # segundos por robots ou sitemap, download inteiro
+MAX_DELAY = 60.0  # teto do intervalo entre requests num host que respondeu 429
 LOC = re.compile(r"<loc>\s*(.*?)\s*</loc>", re.I | re.S)
 # lxml em várias threads ao mesmo tempo dá segfault. Uma thread só para extrair.
 EXTRACT = ThreadPoolExecutor(max_workers=1)
@@ -143,16 +145,22 @@ class Worker:
         else:
             rules = parse_robots(robots)
         if h["want_sitemaps"]:
-            urls = await self.sitemaps(rules.site_maps() or [], delay, deadline)
+            urls = await self.sitemaps(list(rules.sitemaps), delay, deadline)
             info = {"crawl_delay": delay, **(info or {}), "sitemaps": True}
         pages = []
         for u in h["urls"]:
             if asyncio.get_running_loop().time() > deadline:
                 break
-            if not rules.can_fetch(UA, u["url"]):
+            if not allowed(rules, u["url"]):
                 pages.append({"url": u["url"], "depth": u["depth"], "status": ROBOTS_BLOCKED})
                 continue
-            pages.append(await self.fetch_page(u))
+            page = await self.fetch_page(u)
+            pages.append(page)
+            if page["status"] in (429, 503):
+                # O site pediu calma: dobra o intervalo dele e deixa o resto do lote para depois.
+                delay = min(max(delay * 2, 5.0), MAX_DELAY)
+                info = {**(info or {}), "crawl_delay": delay}
+                break
             await asyncio.sleep(delay)
         return {"host": host, "pages": pages, "info": info, "urls": urls}
 
@@ -262,10 +270,17 @@ class Worker:
         return result
 
 
-def parse_robots(text: str) -> RobotFileParser:
-    rules = RobotFileParser()
-    rules.parse(text.splitlines())
-    return rules
+def allowed(rules: Protego, url: str) -> bool:
+    """A normalização tira a barra do fim do caminho, e Disallow: /x/ não pegava /x?a=1."""
+    parts = urlsplit(url)
+    slashed = urlunsplit(parts._replace(path=parts.path.rstrip("/") + "/"))
+    return rules.can_fetch(url, UA) and rules.can_fetch(slashed, UA)
+
+
+def parse_robots(text: str) -> Protego:
+    """RFC 9309: vale a regra mais específica. O RobotFileParser do Python usa a primeira que
+    casa, e um "Allow: /" antes dos Disallow liberava o site inteiro."""
+    return Protego.parse(text)
 
 
 def main() -> None:
