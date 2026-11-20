@@ -37,7 +37,8 @@ CREATE TABLE frontier (
     depth    smallint NOT NULL DEFAULT 0,
     added_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX frontier_host ON frontier (host, added_at);
+-- Dentro do host, o mais raso primeiro: sementes e sitemaps antes dos links achados no caminho.
+CREATE INDEX frontier_host ON frontier (host, depth, added_at DESC);
 
 CREATE TABLE pages (
     id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

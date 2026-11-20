@@ -132,12 +132,17 @@ Regras:
   simhash do texto que foi embedado e só muda quando o embedding é refeito. Assim pequenas
   mudanças acumuladas não passam despercebidas.
 - Chunk de 1700 caracteres, cerca de 512 tokens, cortado em parágrafo ou frase no `common`.
-- Profundidade máxima 5. Passou disso, quase sempre é erro ou spam.
+- Profundidade máxima 3, contada a partir da semente ou do sitemap (`MAX_DEPTH`). Era 5: em 20/11,
+  63% das 450 mil páginas de 6 horas estavam a 4 ou 5 cliques da entrada, previsão do tempo de
+  cada município, listagem de produto, reclamação. 1,5 milhão de URLs da frontier com mais de 3
+  saltos foram apagadas.
 - Não existe teto real por host. `max_pages` é válvula contra sites infinitos, padrão 1 milhão,
   e só se ajusta para baixo. Quem regula é a prioridade: ao devolver um lote, o host espera
   `sqrt(page_count)` segundos antes de voltar à fila, e recebe até `sqrt(page_count)` URLs por
   lote, no máximo 100. Sites pequenos e novos passam na frente, sites grandes andam devagar mas
-  sempre andam. Frontier é servida do mais novo para o mais antigo.
+  sempre andam. Frontier é servida do mais raso para o mais fundo e, na mesma profundidade, do mais
+  novo para o mais antigo (índice `frontier_host`): sementes e sitemaps antes dos links achados no
+  caminho. Do mais novo primeiro, o link fundo recém-achado passava na frente de tudo.
 - Sitemaps são relidos a cada 24 horas em todo host com conteúdo em português.
 - O foco no Brasil é redução de escopo, não regra absoluta. Cada host tem `langs`, idiomas
   aceitos. Hosts `.br` nascem com `{pt,en}`, porque site brasileiro publicando em inglês é

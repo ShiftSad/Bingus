@@ -23,7 +23,9 @@ NEW_INTERVAL = dt.timedelta(days=7)
 MIN_INTERVAL = dt.timedelta(days=1)
 MAX_INTERVAL = dt.timedelta(days=90)
 DEAD_INTERVAL = dt.timedelta(days=90)  # redirects e páginas fora do idioma
-MAX_DEPTH = 5
+# Saltos a partir de uma semente ou sitemap. Com 5, 63% do que entrava eram páginas a 4 ou 5 cliques
+# da entrada: previsão do tempo de cada município, listagens de produto, reclamações.
+MAX_DEPTH = 3
 MAX_LINKS = 500
 MAX_PER_HOST = 100  # hosts grandes recebem até isso por lote
 HOST_BUDGET = 60  # segundos de relógio que um host ocupa num lote; o worker para ao estourar
@@ -129,7 +131,7 @@ DELETE FROM frontier WHERE host = $1 AND (SELECT blocked FROM h)
 
 FRONTIER_URLS = """
 SELECT url, depth, NULL::text AS etag, NULL::text AS last_modified
-FROM frontier WHERE host = $1 ORDER BY added_at DESC LIMIT $2
+FROM frontier WHERE host = $1 ORDER BY depth, added_at DESC LIMIT $2
 """
 
 DUE_URLS = """
@@ -146,7 +148,7 @@ COOLDOWN = "now() + make_interval(secs => greatest(sqrt(page_count) / (1 + prior
 RELEASE_HOST = f"""
 UPDATE hosts h SET leased_until = NULL, next_due = greatest({COOLDOWN}, coalesce(least(
     CASE WHEN h.page_count < h.max_pages
-         THEN (SELECT min(f.added_at) FROM frontier f WHERE f.host = h.host) END,
+          AND EXISTS (SELECT FROM frontier f WHERE f.host = h.host) THEN now() END,
     (SELECT min(p.next_check_at) FROM pages p WHERE p.host = h.host AND p.fail_count < 10)
 ), 'infinity'))
 WHERE h.host = $1
