@@ -203,11 +203,12 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
   worker fazia 2 páginas por segundo. Um host recebe no máximo 60 segundos de trabalho por lote.
   Throughput se ajusta em `BINGUS_HOSTS`, não em URLs por host; extração é uma thread só.
 - Um worker satura um núcleo (GIL: HTTP, extração e links no mesmo processo), então se escala em
-  processos. Nesta máquina roda 1 worker nativo com `BINGUS_HOSTS=100` (`~/.config/bingus/fetch.env`):
+  processos. Nesta máquina roda 1 worker nativo com `BINGUS_HOSTS=80` (`~/.config/bingus/fetch.env`):
   o bastante para enfileirar chunks no ritmo que a GPU vetoriza, ~40 por segundo. Com 12 a coleta
   enfileirava 236 chunks/s, ocupava 71% da CPU da máquina e a fila do embed só crescia. Nos hosts
   do foco, portais grandes que respondem devagar, o worker espera rede: com 40 em voo fazia 5
-  páginas/s a 0,17 núcleo; com 120, 28 páginas/s e 50 chunks/s a 1,1 núcleo. Desde 19/11 a coleta é focada:
+  páginas/s a 0,17 núcleo; com 120, 28 páginas/s e 50 chunks/s a 1,1 núcleo. Depois do `Pace`, os hosts
+  devolvem a vaga mais cedo: com 100, 30 páginas/s e 50 chunks/s, daí 80. Desde 19/11 a coleta é focada:
   `BINGUS_MIN_PRIORITY=4` faz a lease entregar só hosts com prioridade 4 ou mais, ou semeados à mão
   (`fetch.py`, `MIN_PRIORITY`). O mesmo filtro vale para a frontier: link para host abaixo do corte
   não entra (`add_frontier`, `min_priority`; seed e `/page` passam 0), senão acumulava URL que
