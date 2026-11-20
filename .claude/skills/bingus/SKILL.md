@@ -185,6 +185,14 @@ revisitada em 90 dias. Só página em português alimenta a frontier.
 - Cada host tem no máximo 60 s de relógio por lote (`HOST_BUDGET`, robots e sitemaps inclusos): o
   worker para ao estourar e o resto fica na fila. A API dimensionava o lote só pelo `crawl_delay`,
   sem o tempo de download, e um host segurava o slot por 2 a 4 minutos.
+- O worker espera o `crawl_delay` antes de cada request (`Pace`), nunca além do orçamento: se a
+  espera não cabe, devolve o host. Ao devolver, a API só realuga depois do `crawl_delay`
+  (`COOLDOWN`). Crawl-delay sem teto existe: 175 hosts do foco pediam mais de 60 s, alguns 86400.
+  Antes o worker dormia o intervalo inteiro depois da página, a lease vencia, o mesmo host voltava
+  num lote novo e prendia outra vaga. Em 20/11 as vagas presas passaram de 75, o worker parou de
+  pedir hosts (pede só com um quarto livre) e a coleta ficou 4 horas em zero sem nenhum aviso no
+  log. `flying` é um conjunto de nomes, então o desligamento mostrava "1 hosts released".
+  Com intervalo de um lote ou mais, o host não lê sitemaps: eles tomariam a vez das páginas.
 - Lease fixa de 3 minutos (`LEASE_SECONDS`): orçamento, o download em curso e o próximo envio.
   Expirou, o host volta para a fila. Antes crescia com o `crawl_delay` e chegava a 50 minutos.
 - O worker mantém `BINGUS_HOSTS` hosts em voo o tempo todo: cada host libera o slot ao

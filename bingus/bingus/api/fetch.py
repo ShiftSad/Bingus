@@ -139,8 +139,9 @@ ORDER BY next_check_at LIMIT $2
 """
 
 # Quanto maior o host, mais ele espera entre lotes: sqrt(page_count) segundos, dividido pela
-# prioridade, para os hosts do foco andarem no ritmo do crawl_delay.
-COOLDOWN = "now() + make_interval(secs => sqrt(page_count) / (1 + priority))"
+# prioridade, para os hosts do foco andarem no ritmo do crawl_delay. Nunca menos que o próprio
+# crawl_delay: com Crawl-delay de uma hora, o worker faz um request e devolve o host.
+COOLDOWN = "now() + make_interval(secs => greatest(sqrt(page_count) / (1 + priority), crawl_delay))"
 
 RELEASE_HOST = f"""
 UPDATE hosts h SET leased_until = NULL, next_due = greatest({COOLDOWN}, coalesce(least(

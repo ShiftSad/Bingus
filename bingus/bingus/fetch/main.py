@@ -37,6 +37,27 @@ LOC = re.compile(r"<loc>\s*(.*?)\s*</loc>", re.I | re.S)
 EXTRACT = ThreadPoolExecutor(max_workers=1)
 
 
+class Pace:
+    """O crawl_delay de um host dentro do orçamento do lote."""
+
+    def __init__(self, delay: float) -> None:
+        self.loop = asyncio.get_running_loop()
+        self.delay = delay
+        self.deadline = self.loop.time() + HOST_BUDGET
+        self.busy = False  # já houve request: o próximo espera o delay
+
+    async def turn(self) -> bool:
+        """Espera o delay antes do próximo request. False quando a espera passa do orçamento, e o
+        host devolve o slot. Dormir um Crawl-delay de um dia segurava o slot, a lease vencia, o
+        host voltava num lote novo e prendia outro, até o worker parar de pedir hosts."""
+        wait = self.delay if self.busy else 0.0
+        if self.loop.time() + wait > self.deadline:
+            return False
+        await asyncio.sleep(wait)
+        self.busy = True
+        return True
+
+
 class Worker:
     def __init__(self, api: Api, stats: Stats) -> None:
         self.api = api
@@ -134,34 +155,35 @@ class Worker:
     async def crawl_host(self, h: dict[str, Any]) -> dict[str, Any]:
         # A API dimensiona o lote pelo crawl_delay, sem contar o tempo de cada download: um host
         # lento segurava o slot por minutos. O que não couber fica na fila para o próximo lote.
-        deadline = asyncio.get_running_loop().time() + HOST_BUDGET
-        host, delay, robots = h["host"], h["crawl_delay"], h["robots"]
+        pace = Pace(h["crawl_delay"])
+        host, robots = h["host"], h["robots"]
         info, urls = None, []
         if robots is None:
             robots = await self.robots(host)
             rules = parse_robots(robots)
-            delay = float(rules.crawl_delay(UA) or 1.0)
-            info = {"robots": robots, "crawl_delay": delay}
+            pace.delay = float(rules.crawl_delay(UA) or 1.0)
+            pace.busy = True
+            info = {"robots": robots, "crawl_delay": pace.delay}
         else:
             rules = parse_robots(robots)
         if h["want_sitemaps"]:
-            urls = await self.sitemaps(list(rules.sitemaps), delay, deadline)
-            info = {"crawl_delay": delay, **(info or {}), "sitemaps": True}
+            if pace.delay < HOST_BUDGET:  # com um request por lote, o sitemap tomaria a vez sempre
+                urls = await self.sitemaps(list(rules.sitemaps), pace)
+            info = {"crawl_delay": pace.delay, **(info or {}), "sitemaps": True}
         pages = []
         for u in h["urls"]:
-            if asyncio.get_running_loop().time() > deadline:
-                break
             if not allowed(rules, u["url"]):
                 pages.append({"url": u["url"], "depth": u["depth"], "status": ROBOTS_BLOCKED})
                 continue
+            if not await pace.turn():
+                break
             page = await self.fetch_page(u)
             pages.append(page)
             if page["status"] in (429, 503):
                 # O site pediu calma: dobra o intervalo dele e deixa o resto do lote para depois.
-                delay = min(max(delay * 2, 5.0), MAX_DELAY)
-                info = {**(info or {}), "crawl_delay": delay}
+                pace.delay = min(max(pace.delay * 2, 5.0), MAX_DELAY)
+                info = {**(info or {}), "crawl_delay": pace.delay}
                 break
-            await asyncio.sleep(delay)
         return {"host": host, "pages": pages, "info": info, "urls": urls}
 
     async def robots(self, host: str) -> str:
@@ -173,21 +195,18 @@ class Worker:
                 break
         return ""
 
-    async def sitemaps(self, sitemaps: list[str], delay: float, deadline: float) -> list[str]:
+    async def sitemaps(self, sitemaps: list[str], pace: Pace) -> list[str]:
         found: list[str] = []
-        loop = asyncio.get_running_loop()
         for sm in sitemaps[:MAX_SITEMAPS]:
-            if loop.time() > deadline:
+            if not await pace.turn():
                 break
             body, _ = await self.fetch_bytes(sm)
-            await asyncio.sleep(delay)
             locs = LOC.findall(body.decode(errors="replace"))
             if b"<sitemapindex" in body:
                 for child in locs[:MAX_SITEMAPS]:
-                    if loop.time() > deadline:
+                    if not await pace.turn():
                         break
                     body, _ = await self.fetch_bytes(child)
-                    await asyncio.sleep(delay)
                     found += LOC.findall(body.decode(errors="replace"))
             else:
                 found += locs
