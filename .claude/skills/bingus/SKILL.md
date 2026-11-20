@@ -360,6 +360,23 @@ Tavily piorou os resultados; o Exa vai com `userLocation: "BR"`.
   313 com prioridade 6 somando as citações dos dois, 1.506 URLs novas na fila. Fora: reddit (robots barra), en.wikipedia,
   finance.yahoo (republica agências) e rocketreach (dados de pessoas). Do log só se usa a parte do
   Tavily; as conversas com o LLM e os dados do Discord ficam intocados.
+- Em 20/11 a lease mostrou que prioridade abaixo de 6 é fome: os ~770 hosts com 6 sempre tinham
+  trabalho vencido, e os 933 semeados com 4 (citados uma vez) e 92 com 0 (gerais bons, como STF,
+  Embrapa, Dicio) não recebiam visita nenhuma. Todo host semeado foi para 6. Fora do foco à mão:
+  reddit (robots barra), Wikipédia que não é a pt, Yahoo Finance, RocketReach, tavily.com (o Tavily
+  devolve páginas dele mesmo), tracxn e cbinsights (paywall), com prioridade 0 e sem `seeded`.
+- Rodada de 20/11: 398 buscas novas (`~/bingus-data/referencias/consultas.txt`, por seção: IA,
+  hardware, dev, Linux, redes, celulares, games, ciência, maker, segurança, dia a dia, notícias),
+  no Exa (US$ 2,77) e no Tavily (396 créditos de 1000 do mês), resultados em
+  `/mnt/hdd/bingus/referencias-2026-11-20.jsonl`. Antes de semear, o Bingus tinha 14% das 7.045
+  URLs citadas (Exa 15%, Tavily 12%; dia a dia 22%, ciência 8%); 47% eram de hosts conhecidos sem
+  aquela página. 5.016 URLs semeadas com prioridade 6 e `{pt,en}`; 109 hosts bloqueados pela regra
+  de idioma e citados duas vezes ou mais foram desbloqueados (tomshardware, realpython, docker,
+  redis, postgresql, caddy, tailscale, nextjs...) com `max_pages` 2000: o site em inglês entra com
+  as páginas citadas e a vizinhança rasa, não inteiro; chegando a 2000, a frontier recusa até
+  semente, então numa rodada futura suba o `max_pages` deles antes de semear. Lojas, finanças e sites enormes ficaram
+  bloqueados. Os scripts estão em `~/bingus-data/referencias`: `referencias.py` busca,
+  `cobertura.py` e `cobertura.sh` medem e listam o que falta, `semear.py` semeia.
 
 ## API pública
 
