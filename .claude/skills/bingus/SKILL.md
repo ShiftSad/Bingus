@@ -57,8 +57,8 @@ Fetch worker aceita ainda `BINGUS_HOSTS`, hosts em voo, `BINGUS_PER_HOST`, `BING
 - Orçamento: 32 GB de RAM somando tudo, 16 CPUs, 100 GB de NVMe, até 1 TB no HDD (`/mnt/hdd/bingus`,
   SMR, IOPS da conta limitados a 100 de leitura e 60 de escrita, dividido com o MySQL). O teto de RAM e
   CPU é o `bingus.slice` do systemd do usuário, ver Deploy.
-- Banco no NVMe, menos a tabela `texts`, no tablespace `hdd`. O HDD fica para isso e para arquivos
-  grandes e sequenciais: dumps, backups.
+- Banco no NVMe, menos as tabelas `texts` e `links`, no tablespace `hdd`. O HDD fica para isso e
+  para arquivos grandes e sequenciais: dumps, backups.
 - O dedicado antigo (10.10.0.2, Postgres com 1,17 milhão de páginas) e `api.bingus.sh` estavam fora do
   ar nessa data. O banco daqui nasceu vazio.
 - VPS de entrada com Caddy e TLS na frente da API (10.10.0.1 na WireGuard); aponta para o dedicado antigo.
@@ -108,9 +108,11 @@ Schema em `bingus/schema.sql`. Tabelas:
 
 - `hosts`: um por domínio. robots.txt, crawl_delay, max_pages, rank, blocked, lease.
 - `frontier`: URLs descobertas e nunca buscadas. Chave é `url_hash`. A linha some quando vira página.
-- `pages`: uma por URL buscada. `summary` nulo até alguém acessar a página. `out_links` guarda os
-  `url_hash` apontados. `bm25` é gravado pela ingestão, no mesmo UPDATE, a partir do texto.
+- `pages`: uma por URL buscada. `summary` nulo até alguém acessar a página. `bm25` é gravado pela
+  ingestão, no mesmo UPDATE, a partir do texto.
 - `texts`: texto extraído inteiro de cada página com texto, chave `page_id`, no HD. Ver Deploy.
+- `links`: `targets` guarda os `url_hash` apontados pela página, até 500, chave `page_id`, no HD.
+  Página sem links não tem linha. Só o PageRank lê.
 - `chunks`: fatias de `texts.text` por offset de caractere. `embedding rabitq8(512)`. `simhash` do
   texto embedado. Embedding nulo significa fila do embed worker, na ordem de `priority`.
 - `pages_content` é `(content_hash, id)`: acha a gêmea de menor id sem ordenar todas as cópias.
@@ -405,7 +407,7 @@ mesma transação `REPEATABLE READ` (com o crawler gravando entre elas, links de
 fora da matriz e o rank morria), resolve os hashes de destino por busca binária, monta matriz
 esparsa em scipy e roda 20 iterações com amortecimento
 0.85 e tratamento de páginas sem links. Grava `pages.rank` e `hosts.rank` com média 1. Páginas de
-redirect guardam o destino em `out_links` para repassar rank. Em 11 mil páginas leva 6 s; em 10
+redirect guardam o destino em `links` para repassar rank. Em 11 mil páginas leva 6 s; em 10
 milhões estima-se minutos e uns 12 GB de RAM no pico.
 
 Regra aprendida a caro: nunca um UPDATE só sobre a tabela `pages` inteira. Com 1,17 milhão de
@@ -434,11 +436,11 @@ grande o bastante. Para a Wikipédia existe
 - Extração em processos filhos, `BINGUS_SEED_WORKERS`, padrão 4. No Windows cada processo
   importa tudo de novo, 16 processos estouraram a memória.
 - Cada artigo passa por `ingest`, a mesma função dos resultados do crawler: chunks, twins,
-  `out_links`, tudo igual. Idioma forçado para `pt`, porque o detector erra em artigo curto.
+  `links`, tudo igual. Idioma forçado para `pt`, porque o detector erra em artigo curto.
   Redirects e vazios são pulados. Sufixo "– Wikipédia, a enciclopédia livre" removido.
 - Deadlock com o fetch worker acontece e é esperado: o lote é repetido até cinco vezes.
 - Links internos não vão para a frontier, o dump já traz os artigos. Links externos só entram se
-  o host termina em `.br`. Tudo ainda vai para `out_links`, então o PageRank vê o grafo inteiro.
+  o host termina em `.br`. Tudo ainda vai para `links`, então o PageRank vê o grafo inteiro.
 - No fim, revisitas espalhadas ao acaso por 90 dias, `max_pages` do host em 2 milhões.
 - Reexecutar é seguro: artigo igual cai no caminho "unchanged". O terceiro argumento pula as
   primeiras N linhas para retomar uma carga interrompida.
@@ -565,7 +567,7 @@ Na máquina compartilhada:
   dá timeout de fora até alguém com sudo liberar, como
   `ufw allow in on wg0 from 10.10.0.0/24 to 10.10.0.50 port 5432 proto tcp` em 19/11. O Postgres tem
   `stop_grace_period: 2m`: com `checkpoint_timeout` de 30 min, os 10 s padrão acabavam em SIGKILL.
-- No HD só a tabela `texts`. Testado em 19/11: a tabela `pages` inteira num tablespace no HD (índices
+- No HD só as tabelas `texts` e `links`. Testado em 19/11: a tabela `pages` inteira num tablespace no HD (índices
   no NVMe) fez cada busca BM25 levar minutos, porque o scan lê milhares de blocos das linhas e do
   TOAST, onde mora o vetor `bm25`. As buscas seguravam locks de buffer e travavam a ingestão. O scan
   do `vchord_bm25` não atende `pg_cancel_backend` nem `pg_terminate_backend`; só `kill -9` no
@@ -574,9 +576,12 @@ Na máquina compartilhada:
   (`/tablespace/data` no container, `BINGUS_PG_TABLESPACE=/mnt/hdd/bingus/pg` no host). A busca lê
   o texto só dos resultados mostrados, o embed lê os chunks alugados, e a amostra de grafias lê ~2
   mil blocos por hora. Por página com texto são ~2,7 KB de texto comprimido (agora no HD), ~2,7 KB
-  de vetor BM25, ~3,2 KB de índice BM25 e ~0,6 KB de links. Com o mount sumindo, o container
-  continua de pé apontando para a pasta apagada e o Postgres não grava em `texts`: recriar com
-  `--force-recreate --no-deps postgres`. `max_wal_size` é 4 GB: com 16 GB, o WAL ocupava 16 GB.
+  de vetor BM25, ~3,2 KB de índice BM25 e ~0,5 KB de links. Os links saíram de `pages.out_links`
+  para `links`, no HD, também em 19/11: eram 2,3 GB, 40% do heap de `pages`, lidos só pelo
+  PageRank, de ponta a ponta. O HD lê à frente 8 MB (`read_ahead_kb`), então o scan sequencial não
+  esbarra nas 100 leituras por segundo. Com o mount sumindo, o container continua de pé apontando
+  para a pasta apagada e o Postgres não grava em `texts` nem em `links`: recriar com
+  `--force-recreate --no-deps postgres`. `max_wal_size` é 2 GB: com 16 GB, o WAL ocupava 16 GB.
 - Grafana no compose (`grafana/provisioning`): datasource com o usuário `grafana` só de leitura,
   dashboard `grafana/bingus.json` como home, anônimo como Viewer porque só a WireGuard alcança.
   O dashboard pedia o plugin `grafana-postgres-datasource`; o id real é `grafana-postgresql-datasource`.

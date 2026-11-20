@@ -1,4 +1,4 @@
-"""PageRank sobre pages.out_links. Processo à parte, roda uma vez por dia: bingus-rank."""
+"""PageRank sobre a tabela links. Processo à parte, roda uma vez por dia: bingus-rank."""
 
 import asyncio
 import io
@@ -67,7 +67,7 @@ async def run() -> None:
     def resolve(edges: np.ndarray) -> None:
         nonlocal total
         total += len(edges)
-        # out_links guarda url_hash do destino; vira posição na matriz por busca binária
+        # links guarda url_hash do destino; vira posição na matriz por busca binária
         pos = np.searchsorted(sorted_hashes, edges[:, 1])
         pos[pos == n] = 0
         found = sorted_hashes[pos] == edges[:, 1]  # destino que ainda não é página é ignorado
@@ -83,9 +83,7 @@ async def run() -> None:
         order = np.argsort(hashes)
         sorted_hashes = hashes[order]
         del nodes, hashes
-        await stream(
-            conn, "SELECT id, unnest(out_links) FROM pages WHERE out_links IS NOT NULL", 2, resolve
-        )
+        await stream(conn, "SELECT page_id, unnest(targets) FROM links", 2, resolve)
     src, dst = np.concatenate(srcs), np.concatenate(dsts)
     srcs.clear()
     dsts.clear()

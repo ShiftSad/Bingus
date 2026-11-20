@@ -184,7 +184,7 @@ WHERE url_hash = $1
 SAVE_CONTENT = """
 UPDATE pages SET status = $2, title = $3, bm25 = tokenizer_catalog.tokenize($4, 'pt')::bm25vector,
     lang = $5, content_hash = $6, etag = $7, last_modified = $8, check_interval = $9,
-    next_check_at = now() + $9, out_links = $10, published_at = $11, fetched_at = now(),
+    next_check_at = now() + $9, published_at = $10, fetched_at = now(),
     last_changed_at = now(), summary = NULL, fail_count = 0
 WHERE url_hash = $1
 """
@@ -192,6 +192,11 @@ WHERE url_hash = $1
 SAVE_TEXT = """
 INSERT INTO texts (page_id, text) VALUES ($1, $2)
 ON CONFLICT (page_id) DO UPDATE SET text = EXCLUDED.text
+"""
+
+SAVE_LINKS = """
+INSERT INTO links (page_id, targets) VALUES ($1, $2)
+ON CONFLICT (page_id) DO UPDATE SET targets = EXCLUDED.targets
 """
 
 UPSERT_CHUNK = """
@@ -373,7 +378,7 @@ async def ingest(conn: Conn, page: PageResult, links: Links) -> tuple[str, int]:
     if page.final_url and page.final_url != page.url:
         await conn.execute(TOUCH_PAGE, h, 301, 0, DEAD_INTERVAL, None, None, None)
         target = [url_hash(page.final_url)]  # o redirect repassa PageRank para o destino
-        await conn.execute("UPDATE pages SET out_links = $2 WHERE url_hash = $1", h, target)
+        await conn.execute(SAVE_LINKS, row["id"], target)
         moved = page.model_copy(update={"url": page.final_url, "final_url": None})
         return await ingest(conn, moved, links)
 
@@ -414,13 +419,16 @@ async def ingest(conn: Conn, page: PageResult, links: Links) -> tuple[str, int]:
         page.etag,
         page.last_modified,
         interval,
-        [url_hash(u) for u in page_links],
         published(page.published),
     )
     if page.text is None:  # virou hub
         await conn.execute("DELETE FROM texts WHERE page_id = $1", row["id"])
     else:
         await conn.execute(SAVE_TEXT, row["id"], page.text)
+    if page_links:
+        await conn.execute(SAVE_LINKS, row["id"], [url_hash(u) for u in page_links])
+    else:
+        await conn.execute("DELETE FROM links WHERE page_id = $1", row["id"])
     queued = await sync_chunks(conn, row["id"], digest, page.chunks, host, row["rank"])
     for url in page_links:
         add_link(links, url, page.depth + 1)

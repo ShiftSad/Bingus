@@ -59,7 +59,6 @@ CREATE TABLE pages (
     content_hash    bytea,                    -- sha256 do texto extraído
     fail_count      smallint NOT NULL DEFAULT 0,
     rank            real NOT NULL DEFAULT 0,
-    out_links       bigint[],                 -- url_hash das páginas apontadas
     bm25            bm25vector                -- tokens do texto, gravado junto com texts
 );
 CREATE INDEX pages_host_due ON pages (host, next_check_at) WHERE fail_count < 10;
@@ -81,6 +80,15 @@ CREATE TABLE texts (
 );
 ALTER TABLE texts ALTER COLUMN text SET STORAGE MAIN;
 ALTER TABLE texts ALTER COLUMN text SET COMPRESSION lz4;
+
+-- url_hash das páginas apontadas, até 500; redirect guarda o destino para repassar rank. Só o
+-- PageRank lê, de ponta a ponta, então mora no HD como texts (TABLESPACE hdd, chave no NVMe).
+-- Página sem links não tem linha. MAIN: 500 links cabem na própria linha, sem TOAST.
+CREATE TABLE links (
+    page_id bigint PRIMARY KEY REFERENCES pages ON DELETE CASCADE,
+    targets bigint[] NOT NULL
+);
+ALTER TABLE links ALTER COLUMN targets SET STORAGE MAIN;
 
 -- Fatias de texts.text. Embedding nulo = fila do embed worker.
 CREATE TABLE chunks (
