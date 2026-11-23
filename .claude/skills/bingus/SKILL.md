@@ -282,7 +282,7 @@ frontend e o MCP chamam. Híbrida:
 - Paginação por `offset` sobre a lista fundida; `has_more` diz se há mais. O frontend faz
   scroll infinito de 20 em 20. Texto das páginas só é carregado para a fatia pedida.
 - `timings` na resposta: milissegundos de bm25, embed_query, vector, fusion, pages, summaries e
-  total. O frontend mostra na linha acima dos resultados.
+  total. O frontend mostra no painel "Como essa busca rodou", ao lado dos resultados.
 - Fusão por Reciprocal Rank Fusion com k = 60 sobre três listas: BM25, vetorial e os mesmos
   candidatos ordenados por `pages.rank`. O PageRank pesa metade (`RANK_WEIGHT`): com peso cheio, ser o
   primeiro em autoridade valia o mesmo que ser o primeiro em relevância.
@@ -301,7 +301,7 @@ frontend e o MCP chamam. Híbrida:
   da Wikipédia, e não é essa a graça.
 - Resultados sem sumário ganham um na hora, em paralelo, com timeout de 20 s. Ver Sumários.
   `summaries=false` desliga a LLM: sumários já salvos ainda voltam, os que faltam ficam nulos.
-  O frontend tem a chave "Gerar resumos", lembrada em localStorage.
+  O frontend tem a chave "Resumos", lembrada em localStorage.
 - Correção de acentos antes do BM25, à moda do "Mostrando resultados para": o tokenizador Gemma não
   tem nada em comum entre "memoria" e "memória", e sem acento a busca trazia lixo. Cada palavra sem
   acento vira a grafia acentuada quando o corpus a escreve assim 2,5 vezes mais (amostra de títulos
@@ -314,7 +314,12 @@ frontend e o MCP chamam. Híbrida:
   índice inteiro; ficou de fora.
 - Snippet: janela de 300 caracteres do melhor chunk em volta da primeira palavra da query, ou o
   início da página. Resposta traz url, título, host, snippet, summary, score e a posição em cada
-  lista, útil para depurar relevância.
+  lista, útil para depurar relevância. Desde 23/11 o trecho passa por `clean_snippet`: sai o título
+  (primeira linha do texto, que o resultado já mostra), HTML cru, base64 e URL enorme (60+ caracteres
+  sem espaço), linhas de `___`/`---`, pipes de tabela (viram " · ") e linhas com menos de três letras;
+  as quebras de linha viram espaço. Chunk que limpo fica com menos de 80 caracteres (`SNIPPET_MIN`) é
+  sobra do fim da página e troca pelo começo dela. A janela não começa nem termina no meio de palavra.
+  Antes a maioria dos trechos mostrados era título repetido, lixo do extrator ou rodapé.
 - Rate limit por IP com token bucket em memória: rajada de 20, recarga de 1 por segundo, 429 ao
   estourar. Lê `X-Forwarded-For` porque o Caddy fica na frente. Constantes em `search.py`.
 - CORS liberado para GET, porque o frontend chama a API direto do browser.
@@ -420,6 +425,11 @@ no logo e JetBrains Mono nos números. Variáveis e peças comuns em `src/style.
 - `search.html` + `src/search.ts`: chama `GET /search` na API em `VITE_API_URL`, padrão
   `http://localhost:8000`. Chave "Resumos" só troca o que aparece; religada, refaz a busca se faltar
   resumo. Painel "Como essa busca rodou" com os `timings`. "Perguntar à página" chama `/page`.
+  Scroll infinito por IntersectionObserver num sentinela (`#more`) com `min-height: 1px`: vazio e
+  com `display: none` ele nunca dispara. Depois de cada página o sentinela é observado de novo,
+  senão, continuando visível, o observer não avisa outra vez. Texto sem espaço quebra em qualquer
+  ponto (`overflow-wrap: anywhere`) e trecho e título são cortados em 4 e 3 linhas: base64 esticava
+  a coluna.
 - `mcp.html` + `src/mcp.ts`: como conectar o MCP (Claude Code, Claude, Cursor, VS Code, Codex,
   `mcp-remote`), as duas ferramentas, chave e o formato SearXNG. O endereço sai de `VITE_API_URL` + `/mcp`.
 
@@ -538,7 +548,9 @@ consultas por `/api/ds/query`, que expande as macros de verdade.
 
 ### Prometheus
 
-A máquina já tem Grafana, Prometheus central em `10.10.0.1:9090` (remote write aberto, sem
+O Grafana principal do usuário roda no VPS de entrada (10.10.0.1), não nesta máquina; o do compose
+(.50:2028) é só do Bingus. Deploy no .50 não derruba o do .1. Lá também está o
+Prometheus central, `10.10.0.1:9090` (remote write aberto, sem
 credencial, retenção de 30 dias) e um Alloy do sistema, que não é nosso, mandando o node exporter
 com `instance="craftsapiens"` e `job="craftsapiens"`. O Bingus não mexe nele: o compose tem um
 Alloy próprio (`alloy/config.alloy`, imagem fixa) que raspa `GET /metrics` da API a cada 15 s
@@ -602,7 +614,8 @@ Na máquina compartilhada:
 - `.env` daqui, além do que vem abaixo: `BINGUS_PG_DATA=/home/sadness/bingus-data/pg`,
   `BINGUS_HF_CACHE=/home/sadness/.cache/bingus-hf`, `BINGUS_DATA=/mnt/hdd/bingus` (vira `/data` na
   API), `BINGUS_FETCH_REPLICAS=0` (workers nativos, ver Protocolo), `BINGUS_MCP_HOSTS`,
-  `BINGUS_METRICS_KEY` (ver Prometheus, em Métricas), binds em
+  `BINGUS_METRICS_KEY` (ver Prometheus, em Métricas). Em 23/11 a busca daqui devolvia
+  `summaries: 0` ms e nenhum resumo: sem `OPENROUTER_KEY` no `.env`, a LLM fica desligada. Binds em
   `10.10.0.50` portas 2026 (API), 2027 (web), 2028 (Grafana) e 5432 (Postgres, para o Grafana do
   usuário, como era no dedicado). A porta 8080 já é usada por outro serviço da máquina. O Docker
   rootless entrega as conexões da porta publicada vindas de 172.19.0.1, então o `trust` do
