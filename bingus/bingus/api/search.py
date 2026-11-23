@@ -62,6 +62,10 @@ LOW_VALUE = re.compile(
 )
 LOW_VALUE_FACTOR = 0.5
 SNIPPET = 300
+SNIPPET_MIN = 80  # chunk mais curto que isso, limpo, é sobra do fim da página: usa a página inteira
+# Lixo do extrator no trecho: HTML cru, base64 e URL enorme, linha de ____ e ----, pipe de tabela.
+SNIPPET_JUNK = re.compile(r"<[^<>]{0,300}>|\S{60,}|[_=~*#-]{3,}")
+SNIPPET_CELLS = re.compile(r"\s*\|[\s|:]*")
 BURST = 20  # token bucket por IP: aguenta rajada de 20...
 REFILL = 1.0  # ...e recarrega um por segundo
 
@@ -446,12 +450,35 @@ async def navigational(pool: asyncpg.Pool, q: str) -> int | None:
     return await pool.fetchval(ROOT_PAGE, roots)
 
 
+def clean_snippet(text: str) -> str:
+    """Text lines without extractor junk; lines with fewer than three letters (emoji, "a |") go."""
+    lines = []
+    for line in text.splitlines():
+        line = SNIPPET_CELLS.sub(" · ", SNIPPET_JUNK.sub(" ", line)).strip(" ·")
+        if sum(c.isalpha() for c in line) >= 3:
+            lines.append(" ".join(line.split()))
+    return " ".join(lines)
+
+
 def snippet(text: str | None, q: str, chunk: tuple[int, int] | None) -> str | None:
     """A window of the best chunk around the first query word, or the start of the page."""
     if not text:
         return None
-    body = text[chunk[0] : chunk[1]] if chunk else text.split("\n", 1)[-1]
+    body = text[chunk[0] : chunk[1]] if chunk else ""
+    if chunk and chunk[0] == 0:  # o texto começa pelo título, que o resultado já mostra
+        body = body.split("\n", 1)[-1]
+    body = clean_snippet(body)
+    if len(body) < SNIPPET_MIN:
+        body = clean_snippet(text.split("\n", 1)[-1])
+    if not body:
+        return None
     words = [w for w in re.findall(r"\w+", q) if len(w) > 2]
     m = re.search("|".join(map(re.escape, words)), body, re.I) if words else None
     start = max(0, m.start() - SNIPPET // 3) if m else 0
-    return body[start : start + SNIPPET].strip()
+    end = start + SNIPPET
+    if start and (space := body.find(" ", start, m.start() if m else None)) != -1:
+        start = space + 1  # sem começar no meio de uma palavra
+    if end < len(body) and (space := body.rfind(" ", start, end)) != -1:
+        end = space
+    out = body[start:end].strip(" ·")
+    return ("…" if start else "") + out + ("…" if end < len(body) else "")
