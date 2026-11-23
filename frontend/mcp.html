@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conectar via MCP · Bingus</title>
+    <meta name="description" content="Como conectar o Bingus ao seu agente de IA via MCP: Claude, Cursor, VS Code, Codex e outros.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Poppins:wght@600&display=swap">
+    <link rel="stylesheet" href="/src/style.css">
+    <script type="module" src="/src/mcp.ts"></script>
+    <style>
+        .wrap { padding: 48px var(--pad) 96px; display: flex; flex-wrap: wrap; gap: 24px; }
+        .col { flex: 999 1 420px; min-width: 0; max-width: 720px; display: flex; flex-direction: column; gap: 56px; }
+        section { display: flex; flex-direction: column; gap: 14px; }
+        h1 { margin: 0; font-family: 'Poppins', 'Inter', system-ui, sans-serif; font-weight: 600; font-size: clamp(2rem, 1.6rem + 1.6vw, 2.75rem); line-height: 1.1; letter-spacing: -0.03em; }
+        h2 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; }
+        h3 { margin: 0; font-size: 15px; font-weight: 600; }
+        p { margin: 0; color: var(--body); text-wrap: pretty; }
+        .lead { font-size: 18px; line-height: 1.6; }
+        .kicker { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ac); }
+        code { font-family: var(--mono); font-size: .88em; padding: 1px 6px; border-radius: 6px; background: var(--surface); color: var(--ink); }
+        ol { margin: 0; padding-left: 22px; color: var(--body); display: flex; flex-direction: column; gap: 6px; }
+        b { color: var(--ink); font-weight: 600; }
+
+        .url {
+            padding: 6px 6px 6px 20px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 12px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+        }
+        .url span { flex: 999 1 240px; min-width: 0; overflow-wrap: anywhere; font-family: var(--mono); font-size: 15px; }
+        .small { font-size: 13.5px; color: var(--faint); }
+
+        .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+        .tabs button {
+            min-height: 40px;
+            padding: 0 16px;
+            border: 1px solid var(--line2);
+            border-radius: 999px;
+            background: transparent;
+            color: var(--body);
+            font: inherit;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .tabs button:hover { color: var(--ink); border-color: var(--ink); }
+        .tabs button[aria-selected="true"] { background: var(--btn); border-color: var(--btn); color: var(--btn-ink); }
+        [role="tabpanel"] { display: flex; flex-direction: column; gap: 14px; }
+
+        .code { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+        .code pre { margin: 0; padding: 16px 0 16px 18px; overflow-x: auto; font-family: var(--mono); font-size: 13.5px; line-height: 1.6; color: var(--ink); }
+        .code .file { grid-column: 1 / -1; padding: 10px 18px 0; font-family: var(--mono); font-size: 12px; color: var(--faint); }
+        .copy {
+            margin: 8px;
+            min-height: 32px;
+            padding: 0 12px;
+            border: 1px solid var(--line2);
+            border-radius: 999px;
+            background: var(--bg);
+            color: var(--body);
+            font: inherit;
+            font-size: 12.5px;
+            cursor: pointer;
+        }
+        .copy:hover { color: var(--ink); border-color: var(--ink); }
+
+        .tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+        .tool { padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); border-radius: 16px; }
+        .tool h3 { font-family: var(--mono); font-weight: 500; font-size: 14px; }
+        .tool p { font-size: 14.5px; }
+
+        .side {
+            flex: 1 1 240px;
+            max-width: 300px;
+            margin-left: auto;
+            align-self: flex-start;
+            position: sticky;
+            top: 24px;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: var(--surface);
+            border-radius: 16px;
+            font-size: 14px;
+        }
+        .side h2 { font-size: 14px; }
+        .side a { color: var(--body); text-decoration: none; }
+        .side a:hover { color: var(--ink); }
+        @media (max-width: 900px) { .side { display: none; } }
+    </style>
+</head>
+<body>
+    <header class="bar">
+        <div class="bar-in">
+            <a class="logo" href="/" aria-label="Bingus, página inicial">bingus<span class="dim">.sh</span></a>
+            <form class="field" role="search" action="/search">
+                <label class="vh" for="search-input">Buscar no Bingus</label>
+                <input id="search-input" class="q" name="q" type="search" placeholder="Busque em tech, em português" autocomplete="off" required>
+                <button class="ico" type="submit" aria-label="Buscar" style="color: var(--ink)">
+                    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.6-3.6"></path></svg>
+                </button>
+            </form>
+        </div>
+    </header>
+    <main>
+        <div class="wrap">
+            <div class="gutter" aria-hidden="true"></div>
+            <div class="col">
+                <section>
+                    <span class="kicker">MCP</span>
+                    <h1>Bingus no seu agente</h1>
+                    <p class="lead">O Bingus fala MCP, o protocolo que os agentes de IA usam para chamar ferramentas. Conecte uma vez e a sua IA passa a buscar na internet brasileira por conta própria: em português, com foco em tech, e lendo a página inteira quando precisa.</p>
+                </section>
+
+                <section id="endereco">
+                    <h2>O endereço</h2>
+                    <p>É um servidor MCP remoto, por HTTP (streamable HTTP). Não instala nada: o cliente só precisa desta URL.</p>
+                    <div class="url">
+                        <span data-url>MCP_URL</span>
+                        <button class="cta" type="button" data-copy="MCP_URL">Copiar</button>
+                    </div>
+                </section>
+
+                <section id="clientes">
+                    <h2>Conectar</h2>
+                    <div class="tabs" role="tablist" aria-label="Cliente">
+                        <button role="tab" id="t-claude-code" aria-controls="p-claude-code" aria-selected="true">Claude Code</button>
+                        <button role="tab" id="t-claude" aria-controls="p-claude" aria-selected="false" tabindex="-1">Claude</button>
+                        <button role="tab" id="t-cursor" aria-controls="p-cursor" aria-selected="false" tabindex="-1">Cursor</button>
+                        <button role="tab" id="t-vscode" aria-controls="p-vscode" aria-selected="false" tabindex="-1">VS Code</button>
+                        <button role="tab" id="t-codex" aria-controls="p-codex" aria-selected="false" tabindex="-1">Codex</button>
+                        <button role="tab" id="t-outros" aria-controls="p-outros" aria-selected="false" tabindex="-1">Outros</button>
+                    </div>
+
+                    <div role="tabpanel" id="p-claude-code" aria-labelledby="t-claude-code">
+                        <p>No terminal:</p>
+                        <div class="code"><pre data-url>claude mcp add --transport http bingus MCP_URL</pre><button class="copy" type="button">Copiar</button></div>
+                        <p class="small">Com <code>--scope user</code> ele vale em todos os projetos, não só no atual. Confira com <code>claude mcp list</code> ou <code>/mcp</code> dentro do Claude Code.</p>
+                    </div>
+
+                    <div role="tabpanel" id="p-claude" aria-labelledby="t-claude" hidden>
+                        <p>No app do Claude (desktop ou web), como conector personalizado:</p>
+                        <ol>
+                            <li>Abra <b>Configurações › Conectores</b>.</li>
+                            <li>Clique em <b>Adicionar conector personalizado</b>.</li>
+                            <li>Nome <b>Bingus</b> e, na URL, o endereço abaixo.</li>
+                            <li>Numa conversa, ligue o Bingus no menu de ferramentas.</li>
+                        </ol>
+                        <div class="code"><pre data-url>MCP_URL</pre><button class="copy" type="button">Copiar</button></div>
+                    </div>
+
+                    <div role="tabpanel" id="p-cursor" aria-labelledby="t-cursor" hidden>
+                        <p>Em <code>~/.cursor/mcp.json</code> para todos os projetos, ou <code>.cursor/mcp.json</code> só para um:</p>
+                        <div class="code"><span class="file">mcp.json</span><pre data-url>{
+  "mcpServers": {
+    "bingus": {
+      "url": "MCP_URL"
+    }
+  }
+}</pre><button class="copy" type="button">Copiar</button></div>
+                    </div>
+
+                    <div role="tabpanel" id="p-vscode" aria-labelledby="t-vscode" hidden>
+                        <p>Em <code>.vscode/mcp.json</code> no projeto, ou pelo comando <b>MCP: Add Server</b>, escolhendo HTTP:</p>
+                        <div class="code"><span class="file">.vscode/mcp.json</span><pre data-url>{
+  "servers": {
+    "bingus": {
+      "type": "http",
+      "url": "MCP_URL"
+    }
+  }
+}</pre><button class="copy" type="button">Copiar</button></div>
+                        <p class="small">As ferramentas aparecem no modo agente do Copilot Chat.</p>
+                    </div>
+
+                    <div role="tabpanel" id="p-codex" aria-labelledby="t-codex" hidden>
+                        <p>Em <code>~/.codex/config.toml</code>:</p>
+                        <div class="code"><span class="file">config.toml</span><pre data-url>[mcp_servers.bingus]
+url = "MCP_URL"</pre><button class="copy" type="button">Copiar</button></div>
+                    </div>
+
+                    <div role="tabpanel" id="p-outros" aria-labelledby="t-outros" hidden>
+                        <p>Qualquer cliente que aceite MCP remoto por HTTP: aponte para o endereço e pronto. Cliente que só sabe rodar servidor local (stdio) usa a ponte <code>mcp-remote</code>, que precisa do Node:</p>
+                        <div class="code"><pre data-url>{
+  "mcpServers": {
+    "bingus": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "MCP_URL"]
+    }
+  }
+}</pre><button class="copy" type="button">Copiar</button></div>
+                    </div>
+                </section>
+
+                <section id="ferramentas">
+                    <h2>O que a IA ganha</h2>
+                    <p>Duas ferramentas. O agente decide sozinho quando usar cada uma.</p>
+                    <div class="tools">
+                        <div class="tool">
+                            <h3>search(query, limit)</h3>
+                            <p>Busca no índice do Bingus, híbrida: palavras e significado. Devolve título, URL, data de publicação e um trecho de cada resultado, até 20 por vez.</p>
+                        </div>
+                        <div class="tool">
+                            <h3>read_page(url, question)</h3>
+                            <p>Lê uma página inteira, sem menus nem propaganda. Funciona até com URL fora do índice, buscada na hora. Com <code>question</code>, responde sobre a página.</p>
+                        </div>
+                    </div>
+                    <p>Para testar, peça ao agente algo como <b>“procure no Bingus como configurar o WireGuard no Ubuntu e resuma o passo a passo”</b>.</p>
+                </section>
+
+                <section id="chave">
+                    <h2>Se pedir chave</h2>
+                    <p>Uma instância fechada responde 401 sem chave. Mande no header <code>Authorization: Bearer SUA_CHAVE</code>; no Claude Code, acrescente <code>--header "Authorization: Bearer SUA_CHAVE"</code> ao comando. Cliente que não deixa configurar header aceita a chave na própria URL:</p>
+                    <div class="code"><pre data-url>MCP_URL?key=SUA_CHAVE</pre><button class="copy" type="button">Copiar</button></div>
+                </section>
+
+                <section id="sem-mcp">
+                    <h2>Sem MCP</h2>
+                    <p>A busca também responde no formato JSON do SearXNG. Open WebUI, LangChain e afins que já sabem falar com um SearXNG funcionam apontando para o Bingus:</p>
+                    <div class="code"><pre data-url>API_URL/search?q=placa+de+video&amp;format=json</pre><button class="copy" type="button">Copiar</button></div>
+                </section>
+            </div>
+
+            <nav class="side" aria-label="Nesta página">
+                <h2>Nesta página</h2>
+                <a href="#endereco">O endereço</a>
+                <a href="#clientes">Conectar</a>
+                <a href="#ferramentas">O que a IA ganha</a>
+                <a href="#chave">Se pedir chave</a>
+                <a href="#sem-mcp">Sem MCP</a>
+            </nav>
+        </div>
+    </main>
+    <footer class="foot">
+        <div class="foot-in">
+            <div class="gutter" aria-hidden="true"></div>
+            <a class="lnk" href="/">Voltar à busca</a>
+        </div>
+    </footer>
+</body>
+</html>

@@ -15,7 +15,7 @@ BM25 e busca vetorial.
 - O projeto se mantém pequeno. Nada de abstração para o futuro, nada de camada extra.
 - Commits em português, curtos, sem trailer de coautoria. Push quando o servidor precisa puxar.
 - Siga devagar. Uma peça por vez, mostre, espere o ok.
-- O backend NestJS foi apagado. O frontend Vite está congelado, exceto `src/search.ts`.
+- O backend NestJS foi apagado. O frontend é Vite puro, ver Frontend.
 - Sem testes por enquanto. Ruff para lint e formatação.
 - Idioma do código: inglês. Idioma das conversas e da documentação: português.
 - Tudo Python com uv. FastAPI, asyncpg, SQL escrito à mão. Sem ORM. Sem migrations: um `schema.sql` só.
@@ -410,9 +410,21 @@ Code: `claude mcp add --transport http bingus http://10.10.0.50:2026/mcp`.
 
 ## Frontend
 
-Vite puro em `frontend/`, congelado exceto `src/search.ts`, que chama `GET /search` na API em
-`VITE_API_URL`, padrão `http://localhost:8000`. O dev server reescreve `/search` para
-`search.html`; em produção o Dockerfile faz o build e um Caddy serve `dist` com a mesma regra.
+Vite puro em `frontend/`, sem framework nem Bootstrap. Redesenhado em 23/11 a partir de dois
+mockups do dono (início e resultados): tema escuro, claro pelo `prefers-color-scheme`, Inter, Poppins
+no logo e JetBrains Mono nos números. Variáveis e peças comuns em `src/style.css`.
+
+- `index.html` + `src/main.ts`: fogo em ASCII no fundo (`src/fire.ts`, ruído de Perlin; o cursor,
+  o foco e a digitação atiçam), busca por voz (`src/voice.ts`, Web Speech API, botão some sem ela) e
+  "Estou com sorte", que manda `sorte=1` e a página de resultados pula para o primeiro.
+- `search.html` + `src/search.ts`: chama `GET /search` na API em `VITE_API_URL`, padrão
+  `http://localhost:8000`. Chave "Resumos" só troca o que aparece; religada, refaz a busca se faltar
+  resumo. Painel "Como essa busca rodou" com os `timings`. "Perguntar à página" chama `/page`.
+- `mcp.html` + `src/mcp.ts`: como conectar o MCP (Claude Code, Claude, Cursor, VS Code, Codex,
+  `mcp-remote`), as duas ferramentas, chave e o formato SearXNG. O endereço sai de `VITE_API_URL` + `/mcp`.
+
+O dev server reescreve `/search` e `/mcp` para os `.html`; em produção o Dockerfile faz o build e
+um Caddy serve `dist` com a mesma regra (`try_files {path}.html`).
 `VITE_API_URL` entra como build arg pelo compose. Nesta máquina o npm não existe, use
 `pnpm install` e `pnpm dev --host`. O `Caddyfile` da raiz é a borda pública com TLS.
 

@@ -1,4 +1,6 @@
 /// <reference types="vite/client" />
+import { voice } from './voice';
+
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 const LIMIT = 20;
 
@@ -24,160 +26,221 @@ interface Page {
     corrected: string | null;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    const form = document.getElementById('search-form') as HTMLFormElement;
-    const input = document.getElementById('search-input') as HTMLInputElement;
-    const results = document.getElementById('search-results') as HTMLDivElement;
-    const loading = document.getElementById('loading') as HTMLDivElement;
-    const noResults = document.getElementById('no-results') as HTMLDivElement;
-    const summaries = document.getElementById('summaries') as HTMLInputElement;
-    summaries.checked = localStorage.getItem('summaries') !== 'off';
-    summaries.addEventListener('change', () => localStorage.setItem('summaries', summaries.checked ? 'on' : 'off'));
+const form = document.getElementById('search-form') as HTMLFormElement;
+const input = document.getElementById('search-input') as HTMLInputElement;
+const status = document.getElementById('status') as HTMLParagraphElement;
+const results = document.getElementById('results') as HTMLDivElement;
+const more = document.getElementById('more') as HTMLParagraphElement;
+const timings = document.getElementById('timings') as HTMLElement;
+const summaries = document.getElementById('summaries') as HTMLButtonElement;
 
-    // sentinela no fim da lista: quando aparece na tela, pede a próxima página
-    const sentinel = document.createElement('div');
-    sentinel.className = 'text-muted text-center py-3';
-    results.after(sentinel);
-    let current = '';
-    let offset = 0;
-    let hasMore = false;
-    let busy = false;
-    new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && hasMore && !busy) search(current, offset);
-    }).observe(sentinel);
+let current = '';
+let offset = 0;
+let hasMore = false;
+let busy = false;
 
-    const query = new URLSearchParams(window.location.search).get('q')?.trim();
-    if (query) {
-        input.value = query;
-        start(query);
-    } else {
-        loading.classList.add('d-none');
-        noResults.classList.remove('d-none');
+// Resumos: a chave só troca o que aparece; ligada de novo, refaz a busca se faltar resumo.
+const summariesOn = () => summaries.getAttribute('aria-checked') === 'true';
+function setSummaries(on: boolean) {
+    summaries.setAttribute('aria-checked', String(on));
+    document.body.classList.toggle('no-sum', !on);
+    localStorage.setItem('summaries', on ? 'on' : 'off');
+}
+setSummaries(localStorage.getItem('summaries') !== 'off');
+summaries.addEventListener('click', () => {
+    setSummaries(!summariesOn());
+    if (summariesOn() && current && results.querySelector('.text.nosum')) start(current);
+});
+
+voice(document.getElementById('mic') as HTMLButtonElement, input, () => form.requestSubmit());
+
+// Sentinela no fim da lista: quando aparece na tela, pede a próxima página.
+new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && hasMore && !busy) search(current, offset);
+}).observe(more);
+
+form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = input.value.trim();
+    if (!q) return;
+    window.history.pushState({ q }, '', `${window.location.pathname}?q=${encodeURIComponent(q)}`);
+    start(q);
+});
+window.addEventListener('popstate', () => load());
+load();
+
+async function load() {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('q')?.trim();
+    if (!q) {
+        status.textContent = 'Digite algo para buscar.';
+        input.focus();
+        return;
     }
-
-    form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const q = input.value.trim();
-        if (!q) return;
-        window.history.pushState({ q }, '', `${window.location.pathname}?q=${encodeURIComponent(q)}`);
-        results.innerHTML = '';
-        noResults.classList.add('d-none');
-        loading.classList.remove('d-none');
-        start(q);
-    });
-
-    function start(q: string) {
-        current = q;
-        offset = 0;
-        hasMore = false;
-        sentinel.textContent = '';
-        search(q, 0);
-    }
-
-    async function search(q: string, from: number) {
-        busy = true;
-        if (from > 0) sentinel.textContent = 'Carregando mais...';
+    input.value = q;
+    document.title = `${q} · Bingus`;
+    if (params.has('sorte')) {
+        // Estou com sorte: vai direto para o primeiro resultado.
+        status.textContent = 'Procurando o melhor resultado…';
         try {
-            const started = performance.now();
-            const params = `q=${encodeURIComponent(q)}&limit=${LIMIT}&offset=${from}&summaries=${summaries.checked}`;
-            const r = await fetch(`${API_URL}/search?${params}`);
-            if (!r.ok) {
-                const body = await r.json().catch(() => null);
-                throw new Error(body?.detail ?? `A API respondeu ${r.status}.`);
-            }
-            const page = (await r.json()) as Page;
-            if (q !== current) return; // o usuário já buscou outra coisa
-            loading.classList.add('d-none');
-            if (from === 0) {
-                results.innerHTML = page.warnings
-                    .map((w) => `<div class="alert alert-warning">${w}</div>`)
-                    .join('');
-                if (page.corrected) {
-                    const note = document.createElement('div');
-                    note.className = 'mb-2';
-                    note.append('Mostrando resultados para ');
-                    note.appendChild(document.createElement('b')).textContent = page.corrected;
-                    results.appendChild(note);
-                }
-            }
-            if (from === 0 && page.results.length === 0) {
-                noResults.classList.remove('d-none');
-                return;
-            }
-            if (from === 0) {
-                const ms = Math.round(performance.now() - started);
-                const parts = Object.entries(page.timings)
-                    .filter(([k]) => k !== 'total')
-                    .map(([k, v]) => `${k} ${v} ms`)
-                    .join(' · ');
-                results.insertAdjacentHTML(
-                    'beforeend',
-                    `<div class="text-muted small mb-3">${ms} ms no total · ${parts}</div>`,
-                );
-            }
-            for (const item of page.results) results.appendChild(render(item));
-            offset = from + page.results.length;
-            hasMore = page.has_more;
-            sentinel.textContent = hasMore ? '' : `Fim dos resultados: ${offset}`;
-        } catch (err) {
-            console.error(err);
-            loading.classList.add('d-none');
-            const text = err instanceof TypeError ? `Sem resposta da API em ${API_URL}.` : (err as Error).message;
-            const msg = `<div class="alert alert-danger">${text}</div>`;
-            if (from === 0) results.innerHTML = msg;
-            else sentinel.innerHTML = msg;
-        } finally {
-            busy = false;
+            const page = await fetchPage(q, 0, 1, false);
+            if (page.results[0]) return window.location.replace(page.results[0].url);
+        } catch {
+            // segue para a busca normal, que mostra o erro
         }
     }
+    start(q);
+}
 
-    function render(item: Result): HTMLDivElement {
-        const el = document.createElement('div');
-        el.className = 'result-item';
-        const favicon = `https://www.google.com/s2/favicons?domain=${item.host}&sz=32`;
-        const ranks = [
-            item.bm25_rank ? `BM25 #${item.bm25_rank}` : null,
-            item.vector_rank ? `vetor #${item.vector_rank}` : null,
-        ].filter(Boolean).join(' · ');
-        el.innerHTML = `
-            <div class="result-url-container">
-                <img src="${favicon}" class="result-favicon" alt="">
-                <a href="${item.url}" class="result-url">${escape(item.url)}</a>
+function start(q: string) {
+    current = q;
+    offset = 0;
+    hasMore = false;
+    results.innerHTML = '';
+    more.textContent = '';
+    timings.hidden = true;
+    status.textContent = 'Buscando…';
+    document.title = `${q} · Bingus`;
+    search(q, 0);
+}
+
+async function fetchPage(q: string, from: number, limit: number, sums: boolean): Promise<Page> {
+    const params = `q=${encodeURIComponent(q)}&limit=${limit}&offset=${from}&summaries=${sums}`;
+    const r = await fetch(`${API_URL}/search?${params}`);
+    if (!r.ok) {
+        const body = await r.json().catch(() => null);
+        throw new Error(body?.detail ?? `A API respondeu ${r.status}.`);
+    }
+    return (await r.json()) as Page;
+}
+
+async function search(q: string, from: number) {
+    busy = true;
+    if (from > 0) more.textContent = 'Carregando mais…';
+    try {
+        const started = performance.now();
+        const page = await fetchPage(q, from, LIMIT, summariesOn());
+        if (q !== current) return; // o usuário já buscou outra coisa
+        if (from === 0) {
+            const ms = Math.round(performance.now() - started);
+            const fixed = page.corrected ? `Mostrando resultados para <b>${escape(page.corrected)}</b> · ` : '';
+            status.innerHTML = page.results.length
+                ? `${fixed}Resultados em ${duration(ms)}`
+                : `${fixed}Nada encontrado para <b>${escape(q)}</b>. Tente outras palavras.`;
+            for (const w of page.warnings) results.appendChild(note('warn', w));
+            showTimings(ms, page.timings);
+        }
+        for (const item of page.results) results.appendChild(render(item));
+        offset = from + page.results.length;
+        hasMore = page.has_more;
+        more.textContent = hasMore || !offset ? '' : `Fim dos resultados: ${offset}`;
+    } catch (err) {
+        console.error(err);
+        const text = err instanceof TypeError ? `Sem resposta da API em ${API_URL}.` : (err as Error).message;
+        if (from === 0) {
+            status.textContent = '';
+            results.replaceChildren(note('err', text));
+        } else {
+            more.replaceChildren(note('err', text));
+        }
+    } finally {
+        busy = false;
+    }
+}
+
+function duration(ms: number): string {
+    if (ms < 1000) return `${ms} ms`;
+    return `${(ms / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} segundos`;
+}
+
+function showTimings(ms: number, steps: Record<string, number>) {
+    (document.getElementById('total') as HTMLElement).textContent = `${ms} ms`;
+    (document.getElementById('steps') as HTMLElement).innerHTML = Object.entries(steps)
+        .filter(([k]) => k !== 'total')
+        .map(([k, v]) => `<div><dt>${escape(k)}</dt><dd>${Math.round(v)} ms</dd></div>`)
+        .join('');
+    timings.hidden = false;
+}
+
+function note(kind: 'warn' | 'err', text: string): HTMLParagraphElement {
+    const p = document.createElement('p');
+    p.className = `note ${kind}`;
+    p.setAttribute('role', kind === 'err' ? 'alert' : 'status');
+    p.textContent = text;
+    return p;
+}
+
+// https://www.site.com › caminho › da › página
+function crumb(url: string): string {
+    try {
+        const u = new URL(url);
+        return [u.origin, ...u.pathname.split('/').filter(Boolean).map(decodeURIComponent)].join(' › ');
+    } catch {
+        return url;
+    }
+}
+
+function render(item: Result): HTMLElement {
+    const el = document.createElement('article');
+    const host = item.host.replace(/^www\./, '');
+    const meta = [
+        item.bm25_rank ? `bm25 #${item.bm25_rank}` : null,
+        item.vector_rank ? `vetor #${item.vector_rank}` : null,
+        `rank ${Number(item.rank.toFixed(3))}`,
+        item.published?.slice(0, 10),
+    ].filter(Boolean).join(' · ');
+    const snippet = item.snippet ? escape(item.snippet) : '';
+    el.innerHTML = `
+        <div class="src">
+            <span class="initial" aria-hidden="true">${escape(host[0] ?? '?')}</span>
+            <div>
+                <span class="host">${escape(host)}</span>
+                <span class="crumb">${escape(crumb(item.url))}</span>
             </div>
-            <a href="${item.url}" class="result-title">
-                ${escape(item.title ?? item.host)}
-                <span class="similarity-badge">${ranks} · rank ${item.rank}${item.published ? ` · ${item.published}` : ''}</span>
-            </a>
-            ${item.summary ? `<div class="result-snippet"><strong>Resumo:</strong> ${escape(item.summary)}</div>` : ''}
-            ${item.snippet ? `<div class="result-snippet text-muted small mt-1">${escape(item.snippet)}</div>` : ''}
-            <form class="input-group input-group-sm mt-2" style="max-width: 560px">
-                <input type="text" class="form-control" placeholder="Pergunte algo sobre esta página">
-                <button class="btn btn-outline-secondary" type="submit">Perguntar</button>
-            </form>
-            <div class="result-snippet mt-2"></div>
-        `;
-        const form = el.querySelector('form')!;
-        const answer = el.querySelector('div.mt-2:last-child') as HTMLDivElement;
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const prompt = (form.querySelector('input') as HTMLInputElement).value.trim();
-            if (!prompt) return;
-            answer.textContent = 'Perguntando...';
-            const started = performance.now();
-            try {
-                const url = `${API_URL}/page?url=${encodeURIComponent(item.url)}&prompt=${encodeURIComponent(prompt)}`;
-                const r = await fetch(url);
-                const data = (await r.json()) as { answer: string | null; detail?: string };
-                const ms = Math.round(performance.now() - started);
-                answer.innerHTML = `<strong>Resposta</strong> <span class="text-muted small">(${ms} ms)</span>: ${escape(data.answer ?? data.detail ?? 'sem resposta')}`;
-            } catch (err) {
-                answer.textContent = `Erro: ${err}`;
-            }
-        });
-        return el;
-    }
+        </div>
+        <h2><a href="${escape(item.url)}">${escape(item.title ?? host)}</a></h2>
+        ${item.summary
+            ? `<p class="text sum"><b>Resumo</b>${escape(item.summary)}</p>${snippet ? `<p class="text alt">${snippet}</p>` : ''}`
+            : snippet ? `<p class="text nosum">${snippet}</p>` : ''}
+        <div class="foot-line">
+            <span class="meta mono">${meta}</span>
+            <button class="lnk" type="button" aria-expanded="false">Perguntar à página</button>
+        </div>
+        <form class="field ask" hidden>
+            <input class="q" type="text" placeholder="Pergunte algo sobre esta página" aria-label="Pergunta sobre esta página">
+            <button class="cta" type="submit">Perguntar</button>
+        </form>
+        <p class="text answer" aria-live="polite" hidden></p>
+    `;
+    const toggle = el.querySelector('.foot-line button') as HTMLButtonElement;
+    const ask = el.querySelector('form') as HTMLFormElement;
+    const question = ask.querySelector('input') as HTMLInputElement;
+    const answer = el.querySelector('.answer') as HTMLParagraphElement;
+    toggle.addEventListener('click', () => {
+        ask.hidden = !ask.hidden;
+        toggle.setAttribute('aria-expanded', String(!ask.hidden));
+        if (!ask.hidden) question.focus();
+    });
+    ask.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const prompt = question.value.trim();
+        if (!prompt) return;
+        answer.hidden = false;
+        answer.textContent = 'Lendo a página…';
+        const started = performance.now();
+        try {
+            const url = `${API_URL}/page?url=${encodeURIComponent(item.url)}&prompt=${encodeURIComponent(prompt)}`;
+            const r = await fetch(url);
+            const data = (await r.json()) as { answer: string | null; detail?: string };
+            const ms = Math.round(performance.now() - started);
+            answer.innerHTML = `<b>Resposta</b>${escape(data.answer ?? data.detail ?? 'sem resposta')} <span class="meta mono">${ms} ms</span>`;
+        } catch (err) {
+            answer.textContent = `Erro: ${err}`;
+        }
+    });
+    return el;
+}
 
-    function escape(s: string): string {
-        return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-    }
-});
+function escape(s: string): string {
+    return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+}

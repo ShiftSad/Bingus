@@ -1,104 +1,82 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Search Engine</title>
+    <title>Bingus</title>
+    <meta name="description" content="Buscador da internet brasileira, em português, com foco em tech. Também como MCP para agentes.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&family=Poppins:wght@600&display=swap">
+    <link rel="stylesheet" href="/src/style.css">
     <script type="module" src="/src/main.ts"></script>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
-        body {
+        body { position: relative; overflow: hidden; }
+        #fire { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+        .home-top { position: relative; padding: 10px var(--pad); display: flex; justify-content: flex-end; }
+        .home-top .lnk { font-size: 14.5px; font-weight: 500; color: var(--body); }
+        .home-main {
+            position: relative;
             display: flex;
             flex-direction: column;
-            min-height: 100vh;
             align-items: center;
             justify-content: center;
-            background-color: #fff;
+            padding: 24px var(--pad) 120px;
         }
-        .logo {
-            margin-bottom: 30px;
-            text-align: center;
-        }
-        .logo img {
-            width: 272px;
-            height: auto;
-        }
-        .search-container {
+        .home-col { width: 100%; max-width: 680px; display: flex; flex-direction: column; align-items: center; gap: 36px; }
+        .home-col .logo { font-size: clamp(2.5rem, 2rem + 1.8vw, 3.25rem); color: #ff3b2f; }
+        .home-form { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .home-form .field { width: 100%; min-height: 60px; padding: 0 8px 0 22px; }
+        .home-form .q { font-size: 17px; }
+        .home-form .lucky { padding: 0 12px; font-size: 13.5px; }
+        @media (max-width: 480px) { .home-form .field > svg { display: none; } }
+        .promo {
             width: 100%;
-            max-width: 584px;
+            box-sizing: border-box;
+            margin-top: 24px;
+            padding: 12px 12px 12px 20px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px 20px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 16px;
         }
-        .search-bar {
-            border-radius: 24px;
-            box-shadow: 0 1px 6px rgba(32, 33, 36, 0.08);
-            border: 1px solid #dfe1e5;
-        }
-        .search-bar:hover, .search-bar:focus-within {
-            box-shadow: 0 1px 6px rgba(32, 33, 36, 0.2);
-            border-color: rgba(223, 225, 229, 0);
-        }
-        .search-input {
-            border: none;
-            box-shadow: none;
-            font-size: 16px;
-        }
-        .search-input:focus {
-            box-shadow: none;
-            border: none;
-        }
-        .mic-icon {
-            color: #4285f4;
-            font-size: 1.25rem;
-            cursor: pointer;
-        }
-        .search-buttons {
-            margin-top: 20px;
-        }
-        .search-btn {
-            background-color: #f8f9fa;
-            border: 1px solid #f8f9fa;
-            color: #3c4043;
-        }
-        .search-btn:hover {
-            box-shadow: 0 1px 1px rgba(0,0,0,.1);
-            border: 1px solid #dadce0;
-        }
-        .bingus-font {
-            font-family: 'Segoe UI', Arial, sans-serif;
-            background: linear-gradient(45deg, #ff0000, #ff3333, #ff6666, #ff9999);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            font-size: 3.5rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-        }
+        .promo div { flex: 999 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .promo b { font-size: 14px; font-weight: 600; }
+        .promo span { font-size: 13.5px; color: var(--body); }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-12 text-center logo">
-                <h1 class="display-4 fw-bold"><span class="bingus-font">Bingus</span></h1>
-            </div>
-            
-            <div class="col-md-8 col-lg-6 search-container">
-                <form action="/search" method="GET">
-                    <div class="input-group search-bar p-1">
-                        <input type="text" class="form-control search-input py-2" name="q" autocomplete="true" placeholder="Search the web">
-                        <span class="input-group-text bg-transparent border-0">
-                            <i class="bi bi-mic-fill mic-icon"></i>
-                        </span>
-                    </div>
-                    
-                    <div class="d-flex justify-content-center mt-4 search-buttons">
-                        <button type="submit" class="btn search-btn mx-2">Search</button>
-                        <button type="button" class="btn search-btn mx-2">I'm Feeling Lucky</button>
-                    </div>
-                </form>
+    <canvas id="fire" aria-hidden="true"></canvas>
+    <header class="home-top">
+        <a class="lnk" href="/mcp">Conectar via MCP</a>
+    </header>
+    <main class="home-main">
+        <div class="home-col">
+            <h1 class="logo">bingus<span class="dim">.sh</span></h1>
+            <form class="home-form" id="search-form" action="/search" method="GET">
+                <div class="field" id="field" role="search">
+                    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none; color: var(--faint)"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.6-3.6"></path></svg>
+                    <label class="vh" for="q">Buscar no Bingus</label>
+                    <input id="q" class="q" name="q" type="search" placeholder="Busque em tech, em português" autocomplete="off" required autofocus>
+                    <button id="mic" class="ico" type="button" aria-label="Buscar por voz" hidden>
+                        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"></path><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg>
+                    </button>
+                    <button class="cta" type="submit">Buscar</button>
+                </div>
+                <button class="lnk lucky" type="submit" name="sorte" value="1">Estou com sorte</button>
+            </form>
+            <div class="promo">
+                <div>
+                    <b>Bingus no seu agente</b>
+                    <span>Conecte via MCP e a sua IA passa a buscar em tech por conta própria.</span>
+                </div>
+                <a class="ghost" href="/mcp">Conectar</a>
             </div>
         </div>
-    </div>
+    </main>
 </body>
 </html>

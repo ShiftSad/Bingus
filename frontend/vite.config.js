@@ -6,19 +6,19 @@ export default defineConfig({
       input: {
         main: 'index.html',
         search: 'search.html',
+        mcp: 'mcp.html',
         seed: 'seed.html'
       }
     }
   },
   plugins: [
     {
-      // Em produção o servidor estático resolve /search para search.html; aqui o dev server faz o mesmo.
-      name: 'search-route',
+      // Em produção o Caddy resolve /search para search.html e /mcp para mcp.html; aqui o dev server faz o mesmo.
+      name: 'html-routes',
       configureServer(server) {
         server.middlewares.use((req, _res, next) => {
-          if (req.url === '/search' || req.url.startsWith('/search?')) {
-            req.url = '/search.html' + req.url.slice('/search'.length);
-          }
+          const m = req.url.match(/^\/(search|mcp)(\?.*)?$/);
+          if (m) req.url = `/${m[1]}.html${m[2] ?? ''}`;
           next();
         });
       }
