@@ -446,6 +446,21 @@ Sem chave, tudo devolve None e nada quebra. Só os primeiros 12 mil caracteres d
 o modelo. Para rodar a API localmente com o `.env`: `set -a; . ../.env; set +a` antes do `uv run`,
 sobrescrevendo `DATABASE_URL` para `localhost`.
 
+- LLM local (23/11): o serviço `llm` do compose (perfil `workers`) é o `llama-server` do llama.cpp
+  com o Gemma 4 E2B Q4 QAT oficial (`google/gemma-4-E2B-it-qat-q4_0-gguf`, 3,3 GB, em
+  `BINGUS_LLM_MODELS`, nesta máquina `/mnt/hdd/bingus/llm`), na mesma GPU do embed. No `.env`:
+  `OPENROUTER_BASE_URL=http://llm:8080/v1`, `OPENROUTER_KEY=local` (qualquer valor; vazio desliga a
+  LLM) e `BINGUS_LLM_CHARS=4000`, o corte do texto com que foi medido. O "perguntar à página" usa o
+  mesmo modelo e vê os mesmos 4000 caracteres. `llm.py` manda `temperature` 0 e `max_tokens` (200 no
+  sumário, 500 na resposta) e tira `*` e crase do sumário, que o frontend mostra cru.
+  Escolhido às cegas em 43 páginas reais de 43 sites, três modelos pequenos de 2026, dois juízes sem
+  saber qual era qual, com o texto original ao lado: Gemma 4 E2B melhor em 37, fiel em 38 e nenhum erro
+  grave; Aion 1.0 Instruct 2.3B (Microsoft) escreve bem e troca o sentido (fiel em 15, 8 erros graves:
+  idade mínima do INSS, faixas de temperatura, `max_connections`); LFM3 1.7B ignora o "até três
+  frases" (40 de 43 com vários parágrafos, 16 cortados nos 200 tokens). Na 3060 Ti, com o embed a 100%:
+  mediana de 2,95 s por sumário, 33 tokens/s, 1650 MiB de VRAM, e o embed não perdeu velocidade.
+  Aion e LFM3 têm código próprio que gera lixo com o cache do transformers 5.24 (`use_cache=False`
+  resolve) e o Aion não roda no llama.cpp sem patch de terceiros.
 - Sumário: gerado na primeira vez que a página aparece num resultado de busca ou em `/page`, um
   request por página em paralelo, persistido em `pages.summary`. A ingestão zera o sumário quando o
   conteúdo muda, e a gravação confere o `content_hash` para não salvar sumário de texto velho.

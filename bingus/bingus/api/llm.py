@@ -1,7 +1,9 @@
-"""Sumários e respostas sobre páginas via OpenRouter. Sem chave, tudo devolve None."""
+"""Sumários e respostas sobre páginas por uma API compatível com a da OpenAI: o OpenRouter ou o
+llama.cpp local do compose. Sem chave, tudo devolve None."""
 
 import logging
 import os
+import re
 import time
 
 import httpx
@@ -11,7 +13,8 @@ log = logging.getLogger("bingus.llm")
 MODEL = os.environ.get("BINGUS_LLM_MODEL", "inclusionai/ling-3.0-flash")
 KEY = os.environ.get("OPENROUTER_KEY")
 BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-MAX_CHARS = 12_000  # da página; o resto raramente muda um sumário
+# Da página; o resto raramente muda um sumário. O modelo local foi medido com 4000.
+MAX_CHARS = int(os.environ.get("BINGUS_LLM_CHARS", 12_000))
 TTL = 12 * 3600  # respostas com prompt vivem só na RAM
 CACHE_MAX = 1000
 
@@ -31,7 +34,7 @@ client = httpx.AsyncClient(
 answers: dict[tuple[bytes, str], tuple[float, str]] = {}
 
 
-async def complete(system: str, user: str) -> str | None:
+async def complete(system: str, user: str, max_tokens: int) -> str | None:
     if not KEY:
         return None
     r = await client.post(
@@ -39,6 +42,8 @@ async def complete(system: str, user: str) -> str | None:
         json={
             "model": MODEL,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "max_tokens": max_tokens,  # modelo pequeno que não para sozinho não segura a fila
+            "temperature": 0,
         },
     )
     r.raise_for_status()
@@ -46,7 +51,9 @@ async def complete(system: str, user: str) -> str | None:
 
 
 async def summarize(text: str) -> str | None:
-    return await complete(SUMMARY, text[:MAX_CHARS])
+    summary = await complete(SUMMARY, text[:MAX_CHARS], 200)
+    # o resultado da busca mostra o texto cru: sai o markdown que o modelo põe em termo e código
+    return re.sub(r"[*`]", "", summary) if summary else summary
 
 
 async def ask(content_hash: bytes, text: str, prompt: str) -> str | None:
@@ -54,7 +61,7 @@ async def ask(content_hash: bytes, text: str, prompt: str) -> str | None:
     hit = answers.get(key)
     if hit and hit[0] > time.monotonic():
         return hit[1]
-    answer = await complete(ANSWER, f"Pergunta: {prompt}\n\nPágina:\n{text[:MAX_CHARS]}")
+    answer = await complete(ANSWER, f"Pergunta: {prompt}\n\nPágina:\n{text[:MAX_CHARS]}", 500)
     if answer:
         if len(answers) >= CACHE_MAX:
             answers.clear()

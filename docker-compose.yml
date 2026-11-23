@@ -177,6 +177,30 @@ services:
               capabilities: [gpu]
     depends_on: [api]
 
+  # LLM local dos resumos e do "perguntar à página": llama.cpp com o Gemma 4 E2B Q4 na GPU do embed.
+  # O GGUF fica em BINGUS_LLM_MODELS. A API fala com ele com OPENROUTER_BASE_URL=http://llm:8080/v1,
+  # OPENROUTER_KEY=local (qualquer valor) e BINGUS_LLM_CHARS=4000 no .env.
+  llm:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    profiles: ["workers"]
+    restart: unless-stopped
+    cgroup_parent: bingus.slice
+    mem_limit: 6g
+    command: >
+      -m /models/${BINGUS_LLM_FILE:-gemma-4-E2B_q4_0-it.gguf} -ngl 99 -c 8192 --parallel 1
+      --reasoning-budget 0 --host 0.0.0.0 --port 8080
+    expose:
+      - "8080"
+    volumes:
+      - ${BINGUS_LLM_MODELS:-./data/llm}:/models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
 volumes:
   pgdata:
   pgtablespace:
