@@ -54,10 +54,16 @@ summaries.addEventListener('click', () => {
 
 voice(document.getElementById('mic') as HTMLButtonElement, input, () => form.requestSubmit());
 
-// Sentinela no fim da lista: quando aparece na tela, pede a próxima página.
-new IntersectionObserver((entries) => {
+// Sentinela no fim da lista: quando aparece na tela, pede a próxima página. Depois de cada página ela
+// é observada de novo, porque se continuar visível o observer não avisa outra vez.
+const observer = new IntersectionObserver((entries) => {
     if (entries[0].isIntersecting && hasMore && !busy) search(current, offset);
-}).observe(more);
+}, { rootMargin: '0px 0px 600px 0px' });
+const watch = () => {
+    observer.unobserve(more);
+    observer.observe(more);
+};
+watch();
 
 form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -145,6 +151,7 @@ async function search(q: string, from: number) {
         }
     } finally {
         busy = false;
+        if (hasMore) watch();
     }
 }
 
@@ -200,8 +207,8 @@ function render(item: Result): HTMLElement {
         </div>
         <h2><a href="${escape(item.url)}">${escape(item.title ?? host)}</a></h2>
         ${item.summary
-            ? `<p class="text sum"><b>Resumo</b>${escape(item.summary)}</p>${snippet ? `<p class="text alt">${snippet}</p>` : ''}`
-            : snippet ? `<p class="text nosum">${snippet}</p>` : ''}
+            ? `<p class="text clamp sum"><b>Resumo</b>${escape(item.summary)}</p>${snippet ? `<p class="text clamp alt">${snippet}</p>` : ''}`
+            : snippet ? `<p class="text clamp nosum">${snippet}</p>` : ''}
         <div class="foot-line">
             <span class="meta mono">${meta}</span>
             <button class="lnk" type="button" aria-expanded="false">Perguntar à página</button>
